@@ -64,6 +64,11 @@ export function MapView() {
       style: 'https://styles.maptoolkit.org/street-en.json',
       center: [0, 0],
       zoom: 2,
+      // The basemap's vector tiles (mtk source) top out at zoom 15; MapLibre
+      // can overzoom a few levels past that by stretching the last tile, but
+      // beyond ~18-19 there's nothing left to stretch and the map goes blank.
+      // Capping here keeps zooming useful instead of scrolling into a void.
+      maxZoom: 18,
       attributionControl: { customAttribution: '© OpenStreetMap contributors' },
     })
     mapRef.current = map
