@@ -17,6 +17,18 @@ export interface LayerVisibility {
   blocks: boolean
 }
 
+/** Applied once a result exists: only the urban blocks stand out over the basemap. */
+const BLOCKS_ONLY_LAYER_VISIBILITY: LayerVisibility = {
+  analysisArea: false,
+  districts: false,
+  grid: false,
+  originalRoads: false,
+  nodedRoads: false,
+  removedBranches: false,
+  twoCoreRoads: false,
+  blocks: true,
+}
+
 const emptyFeatureCollection: NamedFeatureCollection = { type: 'FeatureCollection', features: [] }
 const emptyGridFeatureCollection: NamedFeatureCollection<{ id: string; state: string; depth: number }> = {
   type: 'FeatureCollection',
@@ -76,6 +88,7 @@ interface AnalysisState {
   setDrawingMode: (mode: DrawingMode) => void
   startNewDrawingSession: () => void
   toggleLayer: (layer: keyof LayerVisibility) => void
+  showOnlyBlocksLayer: () => void
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedDistrictId: (districtId: string | null) => void
   addWarning: (message: string) => void
@@ -148,6 +161,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   toggleLayer: (layer) => set((state) => ({
     layerVisibility: { ...state.layerVisibility, [layer]: !state.layerVisibility[layer] },
   })),
+  showOnlyBlocksLayer: () => set({ layerVisibility: { ...BLOCKS_ONLY_LAYER_VISIBILITY } }),
   setSelectedBlockId: (blockId) => set({ selectedBlockId: blockId }),
   setSelectedDistrictId: (districtId) => set({ selectedDistrictId: districtId }),
   addWarning: (message) => set((state) => ({ warnings: [...state.warnings, message] })),

@@ -6,8 +6,8 @@ import react from '@vitejs/plugin-react'
 // '/' so `npm run dev` is unaffected.
 const githubPagesRepoName = 'urbanblocksbuilder'
 
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? `/${githubPagesRepoName}/` : '/',
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === 'build' || isPreview ? `/${githubPagesRepoName}/` : '/',
   plugins: [react()],
   optimizeDeps: {
     exclude: ['maplibre-gl'],

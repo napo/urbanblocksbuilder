@@ -151,7 +151,7 @@ export function PlaceSearch({ onPreview, onConfirm }: PlaceSearchProps) {
               >
                 <strong>{result.displayName}</strong>
                 <br />
-                <span style={{ fontSize: '0.8rem', color: '#475569' }}>{result.type}</span>
+                <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.85)' }}>{result.type}</span>
               </button>
             </li>
           ))}

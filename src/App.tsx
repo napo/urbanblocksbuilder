@@ -35,6 +35,7 @@ function App() {
   const clearMessages = useAnalysisStore((state) => state.clearMessages)
   const resetResults = useAnalysisStore((state) => state.resetResults)
   const setCacheStatus = useAnalysisStore((state) => state.setCacheStatus)
+  const showOnlyBlocksLayer = useAnalysisStore((state) => state.showOnlyBlocksLayer)
   const setDistricts = useAnalysisStore((state) => state.setDistricts)
   const setDistrictStrategy = useAnalysisStore((state) => state.setDistrictStrategy)
   const startNewDrawingSession = useAnalysisStore((state) => state.startNewDrawingSession)
@@ -74,6 +75,10 @@ function App() {
         setDistrictStatistics(result.districtStatistics)
         setReport(result.report)
         setProcessing(false)
+        // Once a result exists, only the urban blocks should stand out over
+        // the basemap - the selection boundary, grid, roads and districts
+        // were all useful while setting up the analysis, not for reading it.
+        showOnlyBlocksLayer()
         setWizardStep('results')
       },
       onError: (message) => {
@@ -87,7 +92,7 @@ function App() {
     })
 
     return () => client.dispose()
-  }, [client, setProgress, setCacheStatus, addWarning, setBlocks, setRoadLayers, setGrid, setDistrictStatistics, setReport, setProcessing, addError])
+  }, [client, setProgress, setCacheStatus, addWarning, setBlocks, setRoadLayers, setGrid, setDistrictStatistics, setReport, setProcessing, addError, showOnlyBlocksLayer])
 
   const handleAreaConfirmed = (area: AnalysisArea) => {
     setPreviewArea(area)
@@ -158,7 +163,13 @@ function App() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img src="/favicon.svg" alt="" width={40} height={40} style={{ borderRadius: '10px', flexShrink: 0 }} />
+          <img
+            src={`${import.meta.env.BASE_URL}favicon.svg`}
+            alt=""
+            width={40}
+            height={40}
+            style={{ borderRadius: '10px', flexShrink: 0 }}
+          />
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0 }}>{appName}</h1>

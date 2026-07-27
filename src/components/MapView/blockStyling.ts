@@ -89,6 +89,13 @@ export function buildBlockFillExpression(
       ? computeQuantileBreaks(values, classCount)
       : computeEqualIntervalBreaks(values, classCount)
 
+  // A MapLibre 'step' expression needs at least one stop; with no blocks (or
+  // too few distinct values to produce any break) fall back to a flat
+  // colour instead of emitting an invalid 2-argument 'step' expression.
+  if (breaks.length === 0) {
+    return ['literal', colors[0]]
+  }
+
   const expression: unknown[] = ['step', ['get', property], colors[0]]
   breaks.forEach((breakValue, index) => {
     expression.push(breakValue, colors[Math.min(index + 1, colors.length - 1)])
