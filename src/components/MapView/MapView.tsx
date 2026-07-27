@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import type { TerraDraw } from 'terra-draw'
 import { useAnalysisStore, type LayerVisibility } from '../../state/analysisStore'
 import {
@@ -13,6 +14,14 @@ import { buildBlockFillExpression } from './blockStyling'
 import { createTerraDraw, ClearDrawControl } from './drawTools'
 import { createAnalysisArea } from '../../domain/analysisArea'
 import type { AnalysisArea } from '../../domain/types'
+
+// MapLibre otherwise derives its worker URL from import.meta.url of its own
+// bundled chunk, which resolves to *our* app bundle once Vite inlines it -
+// there is no such file next to it on the server, so the request 404s (and
+// on GitHub Pages that 404 comes back as HTML, which the browser then
+// refuses to load as a worker). Importing the worker file with `?url` makes
+// Vite emit it as a real, base-aware asset and rewrites this to that URL.
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 const LINE_LAYERS: Array<{ id: keyof LayerVisibility; source: string; color: string; dashArray?: number[] }> = [
   { id: 'originalRoads', source: 'original-roads', color: '#94a3b8' },
