@@ -1,6 +1,8 @@
 # UrbanBlocksBuilder
 
-**UrbanBlocksBuilder — Generate and Analyse Urban Blocks from OpenStreetMap**
+**UrbanBlocksBuilder - Generate and Analyse Urban Blocks from OpenStreetMap**
+
+Visit: https://napo.github.io/urbanblocksbuilder/
 
 UrbanBlocksBuilder is a browser-first geospatial application that derives urban block polygons from the OpenStreetMap road network. Starting from a user-defined analysis area, it queries Overpass, reconstructs a topologically valid planar road network, recursively removes dead-end branches, polygonizes the remaining network into urban blocks, calculates geometric indicators, and optionally associates every block with a district for statistical reporting.
 
