@@ -25,7 +25,11 @@ export interface ComplexityThresholds {
 export const defaultComplexityThresholds: ComplexityThresholds = {
   simpleMaxEstimatedWays: 400,
   demandingMaxEstimatedWays: 1500,
-  waysPerKm2Estimate: 35,
+  // Raised from 35: that figure under-estimated dense historic centres (e.g.
+  // Trento's centro storico), so cells there weren't subdivided small enough
+  // and their Overpass requests were timing out / 5xx-ing outright - still a
+  // heuristic, not measured, see the module comment above.
+  waysPerKm2Estimate: 80,
   coordinatesPerWayEstimate: 12,
   bytesPerCoordinateEstimate: 28,
 }
@@ -47,7 +51,7 @@ export const defaultGridThresholds: GridThresholds = {
   maxWaysPerCell: 120,
   maxCoordinatesPerCell: 500,
   maxResponseSizeKb: 250,
-  maxRetries: 2,
+  maxRetries: 3,
 }
 
 export const defaultLargeBlockAreaThresholdM2 = 100000

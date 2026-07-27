@@ -10,10 +10,11 @@ import type { AnalysisCache } from '../services/cache/AnalysisCache'
 import { getProjectionForBbox, projectGeometry, unprojectGeometry } from '../geometry/projection'
 import { calculateLogicalLevel } from '../geometry/logicalLayer'
 import { nodeRoadNetwork, type NodingInputLine } from '../geometry/noding'
-import { buildGraphFromNodedEdges } from '../geometry/graph'
+import { buildGraphFromNodedEdges, type GraphEdge } from '../geometry/graph'
 import { extractTwoCore } from '../geometry/twoCore'
-import { polygonizeGraph } from '../geometry/polygonize'
+import { polygonizeGraph, resolveFaceNesting } from '../geometry/polygonize'
 import { clipPolygonToArea } from '../geometry/clipping'
+import { AOI_BOUNDARY_WAY_ID, computeBoundaryContactLength, extractBoundaryRingLines } from '../geometry/boundaryClosure'
 import { calculateBlockIndicators } from '../geometry/indicators'
 import { assignBlocksToDistricts, computeDistrictStatistics } from '../geometry/districts'
 import { buildAnalysisReport } from '../services/export/exportReport'
@@ -198,6 +199,15 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
     }
   }
 
+  // Feed the selection boundary itself into the noding pass as a ground-level
+  // (logicalLevel 0) line. Roads get hard-clipped to this same boundary
+  // above, so any road that would otherwise close a block just outside the
+  // selection now closes against the boundary instead of dangling and being
+  // stripped by the 2-core step - see docs on AOI_BOUNDARY_WAY_ID.
+  for (const ring of extractBoundaryRingLines(areaMetric)) {
+    metricLines.push({ wayId: AOI_BOUNDARY_WAY_ID, logicalLevel: 0, coordinates: ring })
+  }
+
   if (callbacks.isCancelled()) {
     throw new CancellationError()
   }
@@ -210,7 +220,18 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
 
   callbacks.onProgress('Graph construction', 65, { segments: nodingResult.edges.length })
   const graph = buildGraphFromNodedEdges(nodingResult.edges, config.snappingToleranceMeters)
-  const nodedRoads = toLineFeatureCollection(graph.edges.map((edge) => ({ id: edge.id, coordinates: unprojectLineCoordinates(edge.geometry, projection), logicalLevel: edge.logicalLevel })))
+  // Edges attributable only to the synthetic boundary ring (see
+  // AOI_BOUNDARY_WAY_ID) aren't real streets, so keep them out of the
+  // road-network layers shown on the map - the selection outline is already
+  // drawn as its own layer.
+  const isBoundaryOnlyEdge = (edge: GraphEdge) => edge.osmWayReferences.length === 1 && edge.osmWayReferences[0] === AOI_BOUNDARY_WAY_ID
+  const toRoadFeatures = (edges: GraphEdge[]) =>
+    toLineFeatureCollection(
+      edges
+        .filter((edge) => !isBoundaryOnlyEdge(edge))
+        .map((edge) => ({ id: edge.id, coordinates: unprojectLineCoordinates(edge.geometry, projection), logicalLevel: edge.logicalLevel })),
+    )
+  const nodedRoads = toRoadFeatures(graph.edges)
 
   if (callbacks.isCancelled()) {
     throw new CancellationError()
@@ -218,16 +239,13 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
 
   callbacks.onProgress('2-core extraction', 72)
   const twoCoreResult = extractTwoCore(graph)
-  const removedBranches = toLineFeatureCollection(
-    twoCoreResult.removedEdges.map((edge) => ({ id: edge.id, coordinates: unprojectLineCoordinates(edge.geometry, projection), logicalLevel: edge.logicalLevel })),
-  )
-  const twoCoreRoads = toLineFeatureCollection(
-    twoCoreResult.core.edges.map((edge) => ({ id: edge.id, coordinates: unprojectLineCoordinates(edge.geometry, projection), logicalLevel: edge.logicalLevel })),
-  )
+  const removedBranches = toRoadFeatures(twoCoreResult.removedEdges)
+  const twoCoreRoads = toRoadFeatures(twoCoreResult.core.edges)
 
   callbacks.onProgress('Polygonization', 80)
-  const polygonizeResult = polygonizeGraph(twoCoreResult.core, config.snappingToleranceMeters)
-  if (polygonizeResult.faces.length === 0 && graph.edges.length > 0) {
+  const rawPolygonizeResult = polygonizeGraph(twoCoreResult.core, config.snappingToleranceMeters)
+  const polygonizedFaces = resolveFaceNesting(rawPolygonizeResult.faces, config.snappingToleranceMeters)
+  if (polygonizedFaces.length === 0 && graph.edges.length > 0) {
     addWarning('Polygonization produced no closed urban blocks from the 2-core network. The road network for this area may be too sparse or disconnected.')
   }
 
@@ -236,11 +254,12 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
   }
 
   callbacks.onProgress('Indicator calculation', 88)
-  const medianAreaForFlagging = median(polygonizeResult.faces.map((face) => calculateBlockIndicators(face.geometry).areaM2))
+  const medianAreaForFlagging = median(polygonizedFaces.map((face) => calculateBlockIndicators(face.geometry).areaM2))
   const blocksMetric: Array<{ id: string; polygonMetric: GeoJSON.Polygon; properties: UrbanBlockProperties }> = []
   let blockCounter = 0
+  let boundaryClosedCount = 0
 
-  for (const face of polygonizeResult.faces) {
+  for (const face of polygonizedFaces) {
     const clipped = clipPolygonToArea(face.geometry, areaMetric, config.snappingToleranceMeters)
     const polygonsToEmit: GeoJSON.Polygon[] = !clipped
       ? []
@@ -256,6 +275,11 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
       const blockId = `block-${blockCounter}`
       const flaggedSmallArtifact = indicators.areaM2 < config.minAreaM2
       const flaggedLargeArea = indicators.areaM2 > config.largeBlockAreaThresholdM2 || (medianAreaForFlagging > 0 && indicators.areaM2 > medianAreaForFlagging * 8)
+      const boundaryContactLength = computeBoundaryContactLength(polygon, areaMetric, config.snappingToleranceMeters)
+      const flaggedBoundaryClosure = boundaryContactLength > config.snappingToleranceMeters * 3
+      if (flaggedBoundaryClosure) {
+        boundaryClosedCount += 1
+      }
 
       blocksMetric.push({
         id: blockId,
@@ -270,9 +294,16 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
           flaggedSmallArtifact,
           flaggedLargeArea,
           flaggedInvalidGeometry: face.invalidGeometry && !face.repaired,
+          flaggedBoundaryClosure,
         },
       })
     }
+  }
+
+  if (boundaryClosedCount > 0) {
+    addWarning(
+      `${boundaryClosedCount} block(s) are partly bounded by the selection edge rather than a real street, because the road network didn't fully enclose that part of the area. This is expected right at the edge of the selection; if it happens well inside it, the road data for that patch may be incomplete (see any grid-cell warnings above).`,
+    )
   }
 
   callbacks.onProgress('District assignment', 93)

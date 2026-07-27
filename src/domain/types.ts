@@ -54,6 +54,8 @@ export interface UrbanBlockProperties {
   flaggedSmallArtifact: boolean
   flaggedLargeArea: boolean
   flaggedInvalidGeometry: boolean
+  /** True when a non-trivial part of this block's edge is the analysis-area boundary rather than a real street. */
+  flaggedBoundaryClosure: boolean
   districtId?: string
   districtOverlapRatio?: number
 }

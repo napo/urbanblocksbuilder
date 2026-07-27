@@ -430,6 +430,7 @@ function buildBlockPopupHtml(properties: Record<string, unknown>): string {
   if (properties.flaggedSmallArtifact === true || properties.flaggedSmallArtifact === 'true') flags.push('Small artifact')
   if (properties.flaggedLargeArea === true || properties.flaggedLargeArea === 'true') flags.push('Unusually large')
   if (properties.flaggedInvalidGeometry === true || properties.flaggedInvalidGeometry === 'true') flags.push('Invalid geometry (repair failed)')
+  const isBoundaryClosed = properties.flaggedBoundaryClosure === true || properties.flaggedBoundaryClosure === 'true'
 
   return `
     <div style="font-size: 0.85rem; display: grid; gap: 0.15rem;">
@@ -439,6 +440,7 @@ function buildBlockPopupHtml(properties: Record<string, unknown>): string {
       <span>Compactness: ${compactness.toFixed(3)}</span>
       ${properties.districtId ? `<span>District: ${escapeHtml(String(properties.districtId))} (${(Number(properties.districtOverlapRatio ?? 0) * 100).toFixed(0)}% overlap)</span>` : '<span>District: none assigned</span>'}
       ${flags.length > 0 ? `<span style="color:#dc2626;">Warnings: ${flags.join(', ')}</span>` : '<span style="color:#16a34a;">No warnings</span>'}
+      ${isBoundaryClosed ? '<span style="color:#b45309;">Part of this block\'s edge is the selection boundary, not a real street.</span>' : ''}
     </div>
   `
 }

@@ -35,6 +35,8 @@ export function ResultsPanel() {
                 selectedBlock.properties.flaggedInvalidGeometry && 'Invalid geometry',
               ].filter(Boolean).join(', ') || 'None'}
             </dd>
+            <dt>Boundary-closed</dt>
+            <dd>{selectedBlock.properties.flaggedBoundaryClosure ? 'Yes - part of this edge is the selection outline, not a street' : 'No'}</dd>
           </dl>
         </div>
       ) : null}

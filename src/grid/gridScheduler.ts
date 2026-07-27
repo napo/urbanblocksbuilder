@@ -1,6 +1,7 @@
 import type { AnalysisConfig, GridCell, OSMWay } from '../domain/types'
 import { bufferGridCell } from './gridBuffer'
 import { OverpassClient, parseOverpassWays } from '../services/overpass/OverpassClient'
+import { OverpassRequestError } from '../services/overpass/OverpassErrors'
 import type { AnalysisCache } from '../services/cache/AnalysisCache'
 
 export interface GridSchedulerCallbacks {
@@ -56,10 +57,12 @@ async function queryCellWithRetries(
   }
 
   let lastError: unknown = null
+  let attemptsMade = 0
   for (let attempt = 0; attempt <= config.maxRetries; attempt += 1) {
     if (callbacks.isCancelled()) {
       return null
     }
+    attemptsMade += 1
     try {
       const response = await overpassClient.query(bufferedBbox, query)
       const ways = parseOverpassWays(response).map((way) => ({ ...way, sourceCellIds: [cell.id] }))
@@ -69,16 +72,16 @@ async function queryCellWithRetries(
       return { ways, fromCache: false }
     } catch (error) {
       lastError = error
-      const isRetryable = error instanceof Error && /timeout|network|5\d\d|rate/i.test(error.message)
+      const isRetryable = error instanceof OverpassRequestError ? error.retryable : false
       if (!isRetryable || attempt === config.maxRetries) {
         break
       }
-      await delay(Math.min(500 * 2 ** attempt, 8000))
+      await delay(Math.min(1000 * 2 ** attempt, 15000))
     }
   }
 
   callbacks.onWarning(
-    `Grid cell ${cell.id} failed after ${config.maxRetries + 1} attempt(s): ${lastError instanceof Error ? lastError.message : 'unknown error'}. Continuing with the remaining cells.`,
+    `Grid cell ${cell.id} failed after ${attemptsMade} attempt(s): ${lastError instanceof Error ? lastError.message : 'unknown error'}. Continuing with the remaining cells.`,
   )
   return null
 }

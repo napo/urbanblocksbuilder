@@ -66,6 +66,8 @@ export function buildBlockFillExpression(
       'case',
       ['any', ['get', 'flaggedInvalidGeometry'], ['get', 'flaggedLargeArea'], ['get', 'flaggedSmallArtifact']],
       '#dc2626',
+      ['get', 'flaggedBoundaryClosure'],
+      '#f59e0b',
       '#16a34a',
     ]
   }
@@ -114,6 +116,7 @@ export function buildLegendEntries(
   if (attribute === 'flags') {
     return [
       { color: '#dc2626', label: 'Flagged (small, large, or invalid)' },
+      { color: '#f59e0b', label: 'Boundary-closed (edge is the selection outline)' },
       { color: '#16a34a', label: 'No flags' },
     ]
   }

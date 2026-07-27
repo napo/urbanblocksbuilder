@@ -6,7 +6,7 @@ describe('OverpassClient', () => {
     const client = new OverpassClient()
     const query = client.buildRoadQuery([12.4, 41.9, 12.6, 42.1])
 
-    expect(query).toContain('[out:json][timeout:25]')
+    expect(query).toContain('[out:json][timeout:40]')
     expect(query).toContain('way["highway"~')
     expect(query).toContain('41.9')
     expect(query).toContain('12.6')

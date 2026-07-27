@@ -32,7 +32,7 @@ export class OverpassClient {
   constructor(config: AnalysisConfig = defaultAnalysisConfig, options: OverpassClientOptions = {}) {
     this.config = config
     this.rotation = new OverpassEndpointRotation(config.endpoints.length > 0 ? config.endpoints : [config.endpoint])
-    this.timeoutMs = options.timeoutMs ?? 25000
+    this.timeoutMs = options.timeoutMs ?? 45000
     this.rotateEndpoints = options.rotateEndpoints ?? false
   }
 
@@ -64,7 +64,7 @@ export class OverpassClient {
 
       return (await response.json()) as OverpassResponse
     } catch (error) {
-      throw new Error(describeOverpassError(error))
+      throw describeOverpassError(error)
     } finally {
       clearTimeout(timeout)
     }

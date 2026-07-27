@@ -31,15 +31,30 @@ describe('runAnalysisPipeline (fixture mode)', () => {
       noopCallbacks,
     )
 
-    expect(result.blocks.features).toHaveLength(1)
-    const block = result.blocks.features[0]
-    expect(block.properties.areaM2).toBeGreaterThan(8000)
-    expect(block.properties.areaM2).toBeLessThan(16000)
-    expect(block.properties.compactness).toBeGreaterThan(0.6)
-    expect(block.properties.compactness).toBeLessThanOrEqual(1)
-    expect(block.properties.flaggedSmallArtifact).toBe(false)
-    expect(block.properties.flaggedLargeArea).toBe(false)
-    expect(block.properties.projection).toMatch(/utm/)
+    // The fixture square sits deep inside the (much larger) analysis area, so
+    // besides that real block, the leftover of the area - not enclosed by any
+    // real road - is now also emitted as a boundary-closed block (see
+    // boundaryClosure.ts): the selection boundary is fed into the graph so
+    // that roads dangling out of an area close against it instead of
+    // vanishing, and the whole area is always tiled edge to edge.
+    expect(result.blocks.features).toHaveLength(2)
+    const block = result.blocks.features.find((feature) => feature.properties.flaggedBoundaryClosure === false)
+    const leftoverBlock = result.blocks.features.find((feature) => feature.properties.flaggedBoundaryClosure === true)
+    expect(block).toBeDefined()
+    expect(leftoverBlock).toBeDefined()
+
+    expect(block!.properties.areaM2).toBeGreaterThan(8000)
+    expect(block!.properties.areaM2).toBeLessThan(16000)
+    expect(block!.properties.compactness).toBeGreaterThan(0.6)
+    expect(block!.properties.compactness).toBeLessThanOrEqual(1)
+    expect(block!.properties.flaggedSmallArtifact).toBe(false)
+    expect(block!.properties.flaggedLargeArea).toBe(false)
+    expect(block!.properties.projection).toMatch(/utm/)
+
+    // The leftover block's shape is the whole area minus the real block: it
+    // should dwarf the real block's area and get flagged as unusually large.
+    expect(leftoverBlock!.properties.areaM2).toBeGreaterThan(block!.properties.areaM2 * 10)
+    expect(leftoverBlock!.properties.flaggedLargeArea).toBe(true)
 
     // The dangling terminal branch must be removed by the 2-core extraction.
     expect(result.removedBranches.features.length).toBeGreaterThan(0)
@@ -47,6 +62,7 @@ describe('runAnalysisPipeline (fixture mode)', () => {
     expect(result.originalRoads.features.length).toBe(5)
 
     expect(result.report.applicationName).toBe('UrbanBlocksBuilder')
-    expect(result.report.geometryStatistics.inputWays).toBe(5)
+    // 5 fixture ways plus the analysis-area boundary ring fed in alongside them.
+    expect(result.report.geometryStatistics.inputWays).toBe(6)
   })
 })

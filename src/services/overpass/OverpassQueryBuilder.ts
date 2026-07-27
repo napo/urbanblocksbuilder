@@ -32,7 +32,7 @@ export class OverpassQueryBuilder {
     const bboxClause = `(${minLat},${minLon},${maxLat},${maxLon})`
 
     return [
-      '[out:json][timeout:25];',
+      '[out:json][timeout:40];',
       '(',
       `  way["highway"~"^(${highwayClause})$"]["area"!="yes"]${accessExclusions}${bboxClause};`,
       ');',
