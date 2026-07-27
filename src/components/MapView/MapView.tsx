@@ -67,7 +67,6 @@ export function MapView() {
       attributionControl: { customAttribution: '© OpenStreetMap contributors' },
     })
     mapRef.current = map
-    ;(window as unknown as { __debugMap?: maplibregl.Map }).__debugMap = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right')
 
     map.on('load', () => {
@@ -192,7 +191,7 @@ export function MapView() {
   // Analysis area preview / selection
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     const area = selectedArea ?? previewArea
     const source = map.getSource('analysis-area') as maplibregl.GeoJSONSource | undefined
     source?.setData(buildAreaFeatureCollection(area))
@@ -214,7 +213,7 @@ export function MapView() {
   // instead of competing with the choropleth fill.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     if (!map.getLayer('analysis-area-fill') || !map.getLayer('analysis-area-outline')) return
 
     const hasResult = blocks.length > 0
@@ -234,7 +233,7 @@ export function MapView() {
   // Blocks + styling
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     const source = map.getSource('blocks') as maplibregl.GeoJSONSource | undefined
     source?.setData(buildBlocksFeatureCollection(blocks))
     if (map.getLayer('blocks-fill')) {
@@ -245,7 +244,7 @@ export function MapView() {
   // Districts
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     const source = map.getSource('districts') as maplibregl.GeoJSONSource | undefined
     source?.setData(buildDistrictsFeatureCollection(districts))
   }, [districts])
@@ -253,38 +252,38 @@ export function MapView() {
   // Road / grid layers straight from worker output
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     ;(map.getSource('original-roads') as maplibregl.GeoJSONSource | undefined)?.setData(originalRoads)
   }, [originalRoads])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     ;(map.getSource('noded-roads') as maplibregl.GeoJSONSource | undefined)?.setData(nodedRoads)
   }, [nodedRoads])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     ;(map.getSource('removed-branches') as maplibregl.GeoJSONSource | undefined)?.setData(removedBranches)
   }, [removedBranches])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     ;(map.getSource('two-core-roads') as maplibregl.GeoJSONSource | undefined)?.setData(twoCoreRoads)
   }, [twoCoreRoads])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     ;(map.getSource('grid') as maplibregl.GeoJSONSource | undefined)?.setData(grid)
   }, [grid])
 
   // Selected block / district highlight
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     const feature = blocks.find((block) => block.id === selectedBlockId)
     const geoFeature = feature ? { type: 'Feature' as const, geometry: feature.geometry, properties: feature.properties } : undefined
     ;(map.getSource('selected-block') as maplibregl.GeoJSONSource | undefined)?.setData(buildSingleFeatureCollection(geoFeature))
@@ -292,7 +291,7 @@ export function MapView() {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
     const district = districts.find((entry) => entry.id === selectedDistrictId)
     const geoFeature = district ? { type: 'Feature' as const, geometry: district.geometry, properties: { districtId: district.id } } : undefined
     ;(map.getSource('selected-district') as maplibregl.GeoJSONSource | undefined)?.setData(buildSingleFeatureCollection(geoFeature))
@@ -301,7 +300,7 @@ export function MapView() {
   // Layer visibility toggles
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
 
     const setVisible = (layerId: string, visible: boolean) => {
       if (map.getLayer(layerId)) {
