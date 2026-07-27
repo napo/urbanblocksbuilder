@@ -22,6 +22,26 @@ The core idea behind this project - iteratively pruning dead-end streets from th
 - **Local-first**: IndexedDB caching of Overpass responses and results, GeoJSON/report export, and an offline fixture mode for demos without any network access.
 - **Privacy by design**: uploaded files never leave the browser; Overpass queries only ever cover the requested area; cache is local and can be cleared at any time.
 
+## Screenshots: Trento, 500 m radius
+
+These screenshots walk through a real run against live Overpass data - no fixtures - for a 500 m radius around Trento, Italy, searched by place name.
+
+**1. Define area** - search "Trento", pick the city result (a point, since Nominatim returns it without a boundary here), and choose a 500 m radius. The circle preview updates live before you commit to it.
+
+![Area selection: a 500 m radius circle around Trento, previewed on the map before confirming](docs/screenshots/01-area-selection-radius.png)
+
+**2. Configure & run** - the road types and processing parameters, with the confirmed area shown for reference.
+
+![Analysis settings panel, with the two-column road-type selection and the confirmed circle still visible on the map](docs/screenshots/02-configure.png)
+
+**3. Results** - 55 urban blocks generated from Trento's historic centre (Centro storico), each with area, perimeter and compactness. Once a result exists, every other layer (selection boundary, grid, roads, districts) is switched off automatically so only the blocks stand out over the basemap.
+
+![55 urban blocks over Trento's historic centre, coloured by area](docs/screenshots/03-results-blocks.png)
+
+**4. Layers & legend** - block colouring is a classic choropleth: pick the attribute (area, compactness, district, diagnostic flags), the classification method (quantiles, equal intervals, manual thresholds), and one of several sequential colour palettes (Blues by default).
+
+![Layers panel with only "Urban blocks" enabled, and the area/Blues choropleth legend](docs/screenshots/04-layers-legend.png)
+
 ## Technology stack
 
 - React 19 + TypeScript + Vite
