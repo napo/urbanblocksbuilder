@@ -2,6 +2,10 @@ import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+// Not used directly - importing it makes Vite emit it as an asset too, next
+// to the worker file above, which statically imports it by relative path
+// (see the assetFileNames comment in vite.config.ts).
+import 'maplibre-gl/dist/maplibre-gl-shared.mjs?url'
 import type { TerraDraw } from 'terra-draw'
 import { useAnalysisStore, type LayerVisibility } from '../../state/analysisStore'
 import {
