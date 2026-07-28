@@ -31,7 +31,7 @@ export function Stepper({ current, canNavigate, onNavigate }: StepperProps) {
               onClick={() => enabled && onNavigate(step.id)}
             >
               <span className="dot" aria-hidden="true">{state === 'done' ? '✓' : index + 1}</span>
-              {step.label}
+              <span className="stepper-label">{step.label}</span>
             </button>
             {index < STEPS.length - 1 ? <span className="stepper-connector" aria-hidden="true" /> : null}
           </div>

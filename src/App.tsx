@@ -150,20 +150,8 @@ function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <header
-        style={{
-          padding: '0.85rem 1.5rem',
-          borderBottom: '1px solid var(--color-border)',
-          background: 'var(--color-surface)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <header className="app-header">
+        <div className="app-header-brand">
           <img
             src={`${import.meta.env.BASE_URL}favicon.svg`}
             alt=""
@@ -172,14 +160,14 @@ function App() {
             style={{ borderRadius: '10px', flexShrink: 0 }}
           />
           <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <div className="app-header-titles">
               <h1 style={{ margin: 0 }}>{appName}</h1>
               <span style={{ fontSize: '0.75rem', color: 'var(--color-text-subtle)' }}>v{appVersion}</span>
               <button type="button" className="ghost" style={{ padding: '0.1rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setIsAboutOpen(true)}>
                 About
               </button>
             </div>
-            <p style={{ margin: 0, fontSize: '0.8rem' }}>
+            <p className="app-header-tagline" style={{ margin: 0, fontSize: '0.8rem' }}>
               Turns OpenStreetMap streets into urban block polygons: it removes dead-end roads and traces the closed
               loops between intersections, then measures each block's area, perimeter and shape.
             </p>
@@ -188,28 +176,19 @@ function App() {
         <Stepper current={wizardStep} canNavigate={canNavigate} onNavigate={setWizardStep} />
       </header>
 
-      <div
-        style={{
-          padding: '0.35rem 1.5rem',
-          fontSize: '0.72rem',
-          color: 'var(--color-text-subtle)',
-          background: 'var(--color-surface-muted)',
-          borderBottom: '1px solid var(--color-border)',
-          flexShrink: 0,
-        }}
-      >
+      <div className="app-attribution">
         Inspired by Marcos Dione's{' '}
         <a href="https://www.grulic.org.ar/~mdione/glob/posts/block-sizes-from-osm-data/" target="_blank" rel="noreferrer">
           "Block sizes from OSM data"
         </a>.
       </div>
 
-      <div style={{ padding: '0 1.5rem', flexShrink: 0 }}>
+      <div className="app-error-wrap">
         <ErrorPanel />
       </div>
 
-      <main style={{ display: 'flex', flex: 1, minHeight: 0, gap: '1rem', padding: '1rem 1.5rem 1.5rem' }}>
-        <aside className="scroll-area" style={{ width: '400px', flexShrink: 0, display: 'grid', gap: '1rem', alignContent: 'start' }}>
+      <main className="app-main">
+        <aside className="scroll-area app-aside">
           {wizardStep === 'area' ? (
             <>
               <div className="panel">
@@ -275,7 +254,7 @@ function App() {
           ) : null}
         </aside>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="app-map-wrap">
           <MapView wizardStep={wizardStep} />
         </div>
       </main>
