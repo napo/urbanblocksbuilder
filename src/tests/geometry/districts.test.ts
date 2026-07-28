@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignBlocksToDistricts, computeDistrictStatistics } from '../../geometry/districts'
+import { assignBlocksToDistricts, computeDistrictStatistics, type DistrictAssignmentDistrictInput } from '../../geometry/districts'
 
 function squarePolygon(minX: number, minY: number, size: number): GeoJSON.Polygon {
   return {
@@ -44,6 +44,20 @@ describe('assignBlocksToDistricts', () => {
 
     expect(assignments[0].districtId).toBeNull()
   })
+
+  it('still finds the right district when a block genuinely straddles two adjacent district bounding boxes', () => {
+    // Regression guard for the bbox pre-filter added to assignBlocksToDistricts:
+    // this block's own bbox truly overlaps both district-a and district-b's
+    // bboxes (unlike the "mostly in A" block above, whose bbox never reaches
+    // B at all), so the pre-filter must not skip either candidate.
+    const block = { blockId: 'straddling', polygonMetric: squarePolygon(70, 0, 60), areaM2: 3600, compactness: 0.8 }
+
+    const assignments = assignBlocksToDistricts([block], [districtA, districtB], 'largest-overlap', 1)
+
+    // 30x100 inside A, 30x100 inside B - evenly split, but B should not lose to A by more than float noise.
+    expect(assignments[0].districtId).not.toBeNull()
+    expect(assignments[0].overlapRatio).toBeGreaterThan(0.4)
+  })
 })
 
 describe('computeDistrictStatistics', () => {
@@ -64,5 +78,19 @@ describe('computeDistrictStatistics', () => {
     expect(stats[0].blockCount).toBe(2)
     expect(stats[0].totalBlockAreaM2).toBe(800)
     expect(stats[0].meanCompactness).toBeCloseTo(0.8, 5)
+  })
+
+  it('splits a straddling block\'s area across both districts under the intersection strategy (bbox pre-filter regression guard)', () => {
+    const districtA: DistrictAssignmentDistrictInput = { districtId: 'district-a', polygonMetric: squarePolygon(0, 0, 100), areaM2: 10000 }
+    const districtB: DistrictAssignmentDistrictInput = { districtId: 'district-b', polygonMetric: squarePolygon(100, 0, 100), areaM2: 10000 }
+    const block = { blockId: 'straddling', polygonMetric: squarePolygon(70, 0, 60), areaM2: 3600, compactness: 0.8 }
+
+    const stats = computeDistrictStatistics([block], [districtA, districtB], [], 'intersection', 1, 100000)
+
+    const byId = Object.fromEntries(stats.map((s) => [s.districtId, s]))
+    expect(byId['district-a'].blockCount).toBe(1)
+    expect(byId['district-b'].blockCount).toBe(1)
+    expect(byId['district-a'].totalBlockAreaM2).toBeCloseTo(1800, 0)
+    expect(byId['district-b'].totalBlockAreaM2).toBeCloseTo(1800, 0)
   })
 })

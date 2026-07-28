@@ -1,6 +1,7 @@
 import { Polygonizer } from 'jsts/org/locationtech/jts/operation/polygonize.js'
 import { UnaryUnionOp } from 'jsts/org/locationtech/jts/operation/union.js'
 import { createGeometryFactory, isValidJstsGeometry, repairJstsGeometry, toGeoJsonGeometry, toJstsCoordinates, toJstsGeometry, type JstsGeometry } from './validation'
+import { polygonBbox, bboxCovers } from './bbox'
 import type { Graph } from './graph'
 
 export interface PolygonizedFace {
@@ -79,26 +80,6 @@ export function polygonizeGraph(graph: Graph, toleranceMeters: number): Polygoni
   }
 
   return { faces, dangleCount, cutEdgeCount, invalidRingCount }
-}
-
-function polygonBbox(polygon: GeoJSON.Polygon): [number, number, number, number] {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const ring of polygon.coordinates) {
-    for (const [x, y] of ring) {
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (x > maxX) maxX = x
-      if (y > maxY) maxY = y
-    }
-  }
-  return [minX, minY, maxX, maxY]
-}
-
-function bboxCovers(outer: [number, number, number, number], inner: [number, number, number, number]): boolean {
-  return outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3]
 }
 
 /**

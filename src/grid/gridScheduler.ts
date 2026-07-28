@@ -41,8 +41,7 @@ async function queryCellWithRetries(
   const cacheKey = cache
     ? await cache.buildCellCacheKey({
         cellBbox: bufferedBbox,
-        highwayFilters: config.highwayFilters,
-        accessFilters: config.accessFilters,
+        query,
         queryVersion: config.queryVersion,
         algorithmVersion: config.algorithmVersion,
         endpoint: config.endpoint,

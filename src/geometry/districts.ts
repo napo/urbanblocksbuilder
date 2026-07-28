@@ -1,5 +1,6 @@
 import { InteriorPointArea } from 'jsts/org/locationtech/jts/algorithm.js'
 import { createGeometryFactory, toJstsGeometry, type JstsGeometry } from './validation'
+import { polygonBbox, bboxesOverlap, type Bbox } from './bbox'
 import type { DistrictAssignmentStrategy, DistrictStatistics } from '../domain/district'
 
 export interface DistrictAssignmentBlockInput {
@@ -48,9 +49,16 @@ export function assignBlocksToDistricts(
   }
 
   const factory = createGeometryFactory(toleranceMeters)
+  // Precompute each district's bbox once so every block can cheaply skip the
+  // (much more expensive) JSTS intersection/point-in-polygon test against
+  // districts it cannot possibly overlap - without this, assignment cost is
+  // blocks x districts unconditionally, which is the actual bottleneck for
+  // a city-sized analysis with many districts (JSTS calls dominate; the bbox
+  // check is a handful of comparisons).
   const districtGeometries = districts.map((district) => ({
     districtId: district.districtId,
     geometry: toJstsGeometry(district.polygonMetric, factory) as JstsGeometry,
+    bbox: polygonBbox(district.polygonMetric),
   }))
 
   return blocks.map((block) => {
@@ -60,6 +68,8 @@ export function assignBlocksToDistricts(
     } catch {
       return { blockId: block.blockId, districtId: null, overlapRatio: 0 }
     }
+    const blockBbox = polygonBbox(block.polygonMetric)
+    const candidateDistricts = districtGeometries.filter((district) => bboxesOverlap(blockBbox, district.bbox))
 
     if (strategy === 'point-on-surface') {
       const interiorPoint = InteriorPointArea.getInteriorPoint(blockGeometry)
@@ -67,7 +77,9 @@ export function assignBlocksToDistricts(
         return { blockId: block.blockId, districtId: null, overlapRatio: 0 }
       }
       const point = (factory as unknown as { createPoint: (coordinate: unknown) => JstsGeometry }).createPoint(interiorPoint)
-      for (const district of districtGeometries) {
+      const pointBbox: Bbox = [interiorPoint.x, interiorPoint.y, interiorPoint.x, interiorPoint.y]
+      for (const district of candidateDistricts) {
+        if (!bboxesOverlap(pointBbox, district.bbox)) continue
         const contains = (district.geometry as unknown as { intersects: (other: JstsGeometry) => boolean }).intersects(point)
         if (contains) {
           return { blockId: block.blockId, districtId: district.districtId, overlapRatio: 1 }
@@ -78,7 +90,7 @@ export function assignBlocksToDistricts(
 
     let bestDistrictId: string | null = null
     let bestArea = 0
-    for (const district of districtGeometries) {
+    for (const district of candidateDistricts) {
       const area = intersectionArea(blockGeometry, district.geometry)
       if (area > bestArea) {
         bestArea = area
@@ -112,6 +124,7 @@ export function computeDistrictStatistics(
     districtName: district.districtName,
     areaM2: district.areaM2,
     geometry: toJstsGeometry(district.polygonMetric, factory) as JstsGeometry,
+    bbox: polygonBbox(district.polygonMetric),
   }))
 
   const contributionsByDistrict = new Map<string, Array<{ areaM2: number; compactness: number }>>()
@@ -127,7 +140,9 @@ export function computeDistrictStatistics(
       } catch {
         continue
       }
+      const blockBbox = polygonBbox(block.polygonMetric)
       for (const district of districtGeometries) {
+        if (!bboxesOverlap(blockBbox, district.bbox)) continue
         const overlap = intersectionArea(blockGeometry, district.geometry)
         if (overlap > 0) {
           contributionsByDistrict.get(district.districtId)?.push({ areaM2: overlap, compactness: block.compactness })

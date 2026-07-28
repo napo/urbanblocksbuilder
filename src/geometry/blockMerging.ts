@@ -1,5 +1,6 @@
 import { UnaryUnionOp } from 'jsts/org/locationtech/jts/operation/union.js'
 import { createGeometryFactory, toGeoJsonGeometry, toJstsGeometry, type JstsGeometry } from './validation'
+import { polygonBbox, bboxesOverlap } from './bbox'
 
 export interface MergeCandidate {
   id: string
@@ -13,26 +14,6 @@ export interface MergedBlock {
   polygon: GeoJSON.Polygon
   hasBuildings: boolean
   invalidGeometry: boolean
-}
-
-function polygonBbox(polygon: GeoJSON.Polygon): [number, number, number, number] {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const ring of polygon.coordinates) {
-    for (const [x, y] of ring) {
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (x > maxX) maxX = x
-      if (y > maxY) maxY = y
-    }
-  }
-  return [minX, minY, maxX, maxY]
-}
-
-function bboxesOverlap(a: [number, number, number, number], b: [number, number, number, number]): boolean {
-  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
 }
 
 function lineLength(geometry: GeoJSON.Geometry): number {

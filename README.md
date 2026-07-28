@@ -17,9 +17,12 @@ The core idea behind this project - iteratively pruning dead-end streets from th
 - **Four ways to define an analysis area**: search a place name, draw a rectangle, draw a polygon, or upload a GeoJSON file.
 - **Point-radius search**: when a geocoding result is only a point, pick a radius (500 m – 5 km or custom) and the app builds a real geodesic circle as the analysis area.
 - **Adaptive acquisition grid**: large areas are split into a quadtree of Overpass requests with a context buffer, so no single request becomes too large; a global network is reassembled from all cells before any topology work happens.
-- **Real topological processing**: JSTS-based noding (with a snapping tolerance and logical-level awareness for bridges/tunnels/layers), graph construction, recursive 2-core extraction, and JSTS Polygonizer-based block generation - not a placeholder pipeline.
+- **Surface waterways and railways as extra separators**: rivers, streams, canals, and at-grade rail lines divide blocks just like roads do, even with no parallel road nearby - on by default, toggleable.
+- **Boundary-aware block closure**: the selection boundary itself is fed into the road network as a closing edge, so a street that dangles out of the selected area closes the block against the boundary instead of leaving an unexplained gap - the result always tiles the whole selected area.
+- **Building-based block merging**: any block with no building inside it (a park, a car park, a roundabout island, a divided road's median...) is folded into whichever neighbouring block it shares the longest border with, on by default, toggleable.
+- **Real topological processing**: JSTS-based noding (with a snapping tolerance and logical-level awareness for bridges/tunnels/layers), graph construction, recursive 2-core extraction, JSTS Polygonizer-based block generation, and nested-face correction - not a placeholder pipeline.
 - **Geometric indicators**: area, perimeter and Polsby-Popper compactness computed in a local metric (UTM) projection, never in raw longitude/latitude degrees.
-- **Diagnostic flags**: tiny artifacts, unusually large polygons, and unrepaired invalid geometries are flagged and shown, never silently dropped.
+- **Diagnostic flags**: tiny artifacts, unusually large polygons, unrepaired invalid geometries, boundary-closed edges, and still-buildingless blocks are all flagged and shown, never silently dropped.
 - **Optional district analysis**: upload district boundaries and associate them with urban blocks using largest-overlap, point-on-surface, or proportional-intersection strategies, with full per-district statistics.
 - **Local-first**: IndexedDB caching of Overpass responses and results, GeoJSON/report export, and an offline fixture mode for demos without any network access.
 - **Privacy by design**: uploaded files never leave the browser; Overpass queries only ever cover the requested area; cache is local and can be cleared at any time.
@@ -77,7 +80,7 @@ Enable **"Use offline fixture data"** in the Analysis controls panel to exercise
 npx vitest run
 ```
 
-Tests cover GeoJSON normalization/validation, projection, logical-level classification, JSTS noding (T-junctions, same-level crossings, bridge/tunnel isolation), 2-core extraction (terminal branch removal, recursive chains, ring preservation), polygonization (single square, two adjacent squares), district assignment (largest-overlap, point-on-surface), the adaptive grid (quadtree subdivision, buffering), OSM way deduplication, Overpass query building, worker/grid-scheduler cancellation, and export/report metadata. See "Known limitations" below for what is not yet covered.
+Tests cover GeoJSON normalization/validation, projection, logical-level classification, JSTS noding (T-junctions, same-level crossings, bridge/tunnel isolation), 2-core extraction (terminal branch removal, recursive chains, ring preservation), polygonization (single square, two adjacent squares, nested-face correction), the known roundabout-island and divided-road-median artifacts and their resolution via building-based merging (`tests/geometry/knownArtifacts.test.ts`), district assignment (largest-overlap, point-on-surface, intersection, including blocks straddling two districts), the adaptive grid (quadtree subdivision, buffering), OSM way deduplication, Overpass query building (including the waterway/railway/building clauses), the Overpass retry/cache-key logic, worker/grid-scheduler cancellation, and export/report metadata. See "Known limitations" below for what is not yet covered.
 
 ## Production build
 
@@ -134,15 +137,17 @@ See [`docs/architecture.md`](docs/architecture.md) for the full module diagram, 
 ```text
 Analysis area (WGS84)
   -> adaptive acquisition grid (quadtree, buffered cells)
-  -> Overpass queries per cell (bounded concurrency, retries, backoff)
+  -> Overpass queries per cell: roads + surface waterways/railways as separators + building locations (bounded concurrency, retries, backoff)
   -> OSM way deduplication (across overlapping cells)
   -> projection to a local UTM zone
   -> clip to the actual analysis-area geometry (important for the point-radius circle case)
+  -> feed the analysis-area boundary itself into the network as a closing edge
   -> JSTS noding (snapping tolerance, logical-level isolation for bridges/tunnels/layers)
   -> undirected graph construction
   -> recursive 2-core extraction (terminal-branch removal)
-  -> JSTS polygonization
-  -> clip faces to the analysis area, flag tiny/large/invalid results
+  -> JSTS polygonization + nested-face correction
+  -> clip faces to the analysis area, flag tiny/large/invalid/boundary-closed results
+  -> merge any block with no building into its longest-bordering neighbour
   -> geometric indicators (area, perimeter, compactness) in metric space
   -> optional district assignment + statistics
   -> unproject results back to WGS84 for display/export
@@ -178,7 +183,13 @@ All input/output is WGS84 (EPSG:4326). Internally, the worker picks a UTM zone f
 
 ## Bridges, tunnels, and logical levels
 
-Each OSM way is assigned a logical level from `tunnel`, `bridge`, `layer`, and `covered` tags (`geometry/logicalLayer.ts`). Noding groups ways by logical level and only nodes (splits at intersections) ways within the same level - a bridge or tunnel crossing a surface road never becomes topologically connected to it, even though their 2D geometries cross.
+Each OSM way is assigned a logical level from `tunnel`, `bridge`, `layer`, and `covered` tags (`geometry/logicalLayer.ts`). Noding groups ways by logical level and only nodes (splits at intersections) ways within the same level - a bridge or tunnel crossing a surface road never becomes topologically connected to it, even though their 2D geometries cross. **Known edge case**: a road's ground-level approach ending very close (within the snapping tolerance) to the exact point a bridge/tunnel begins can, in rare cases, weld onto an unrelated feature at the same coordinates instead of being pruned as a dead end - see `docs/algorithm.md` for a real example (a road's pre-bridge approach snapping onto the river passing underneath).
+
+## Boundary-aware closure and building-based merging
+
+The selection boundary is fed into the road network as a real edge (`geometry/boundaryClosure.ts`), so a road that dangles out of the selected area closes its block against the boundary instead of leaving a gap - see `docs/algorithm.md`, "Boundary-ring closure". Any resulting block is flagged `flaggedBoundaryClosure` if a non-trivial part of its edge is the selection boundary rather than a real street.
+
+Separately, any block with no building inside it (fetched alongside the road network - see "Overpass usage") is folded into whichever neighbour it shares the longest border with (`geometry/blockMerging.ts`). This has no special knowledge of roundabouts, plazas, or divided roads, but it is in practice what keeps a roundabout's central island or a divided road's median strip from showing up as their own small, meaningless "blocks" - see `docs/algorithm.md` for exactly how, and `tests/geometry/knownArtifacts.test.ts` for the behaviour pinned down as tests.
 
 ## 2-core extraction
 
@@ -186,11 +197,11 @@ A queue-based, adjacency-indexed algorithm removes nodes of degree < 2 and their
 
 ## Polygonization
 
-Uses the JSTS `Polygonizer` on the noded, 2-core-reduced network. Resulting faces are clipped to the actual analysis-area geometry, checked for validity (with `buffer(0)` repair attempted on failure), and flagged - never silently deleted - when they are smaller than the configured small-artifact threshold or larger than the configured large-block threshold (or far above the median).
+Uses the JSTS `Polygonizer` on the noded, 2-core-reduced network, followed by a nested-face correction pass (`resolveFaceNesting`) that punches any face fully contained in another out of it as a hole - necessary once the boundary ring (above) can put a real closed loop and the selection's leftover area in separate, non-touching graph components. Resulting faces are clipped to the actual analysis-area geometry, checked for validity (with `buffer(0)` repair attempted on failure), and flagged - never silently deleted - when they are smaller than the configured small-artifact threshold, larger than the configured large-block threshold (or far above the median), boundary-closed, or still without a building after merging.
 
 ## District analysis
 
-Districts (from upload, geocoding, or future OSM-boundary sources) never influence road-network topology; blocks are always computed globally first. Three assignment strategies are implemented: largest area overlap (default), point-on-surface containment, and a proportional geometric-intersection allocation used specifically for district-level statistics (so a block that straddles a boundary contributes to both districts' totals proportionally, without ever splitting the block's own geometry or its reported area).
+Districts (from upload, geocoding, or future OSM-boundary sources) never influence road-network topology; blocks are always computed globally first. Every block/district pair is first ruled out cheaply by a bounding-box check before the real geometric test runs, so cost scales with how many blocks and districts actually overlap, not `blocks x districts` unconditionally. Three assignment strategies are implemented: largest area overlap (default), point-on-surface containment, and a proportional geometric-intersection allocation used specifically for district-level statistics (so a block that straddles a boundary contributes to both districts' totals proportionally, without ever splitting the block's own geometry or its reported area).
 
 ## Privacy
 
@@ -202,7 +213,9 @@ Districts (from upload, geocoding, or future OSM-boundary sources) never influen
 
 - **UTM zone selection is single-zone**: an area straddling a UTM zone boundary, or at extreme latitudes, uses one zone chosen from the area centre; distortion grows with distance from that zone. A polar/local-alternative projection is not yet implemented.
 - **Complexity thresholds are heuristic defaults** (`config/thresholds.ts`), not calibrated against real Overpass traffic - they must be tuned with real-world testing before being treated as authoritative.
-- **OSM node IDs are not currently preserved** through the Overpass parser, so logical-level grouping and geometric intersection are the noding heuristic rather than exact OSM-topology node matching; this is flagged in `docs/algorithm.md`.
+- **OSM node IDs are not currently preserved** through the Overpass parser, so logical-level grouping and geometric intersection are the noding heuristic rather than exact OSM-topology node matching; this is flagged in `docs/algorithm.md`. A narrow, concretely-observed consequence: a road's ground-level approach ending very close to a bridge/tunnel's start point can weld onto an unrelated feature at the same coordinates instead of being pruned as a dead end (see `docs/algorithm.md`).
+- **Roundabout islands and divided-road medians are not detected as such** - they polygonize as their own ordinary small faces and are only kept from looking like real blocks because the building-based merge happens to fold them into a neighbour (they have no building of their own). This works in practice but is a side effect of a general rule, not a targeted fix; see `docs/algorithm.md`, "Building-based merging".
+- **The per-cell Overpass/building cache has no analysis-level counterpart yet**: `AnalysisCache`'s `saveFinalBlocks`/`loadFinalBlocks`/`saveReport`/`loadReport`/`listCachedAnalyses`/`clearAnalysis` are implemented but never called - there is no "resume a previous analysis" UI yet, only per-cell request caching.
 - **Bundle size**: the production build's main and worker chunks exceed Vite's 500 kB warning threshold (JSTS + Turf + MapLibre are inherently large). Code-splitting is a follow-up, not yet implemented.
 - District boundary upload currently supports GeoJSON only (no direct OSM-boundary download yet).
 

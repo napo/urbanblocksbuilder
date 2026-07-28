@@ -35,7 +35,7 @@ Supporting, independently-testable layers:
 - **services/overpass/** - `OverpassClient` (fetch + timeout + endpoint rotation + retries), `OverpassQueryBuilder` (single source of truth for query text), `OverpassEndpoints` (rotation policy), `OverpassErrors` (readable error mapping), `OverpassParser` (response parsing + cross-cell deduplication).
 - **services/cache/** - `AnalysisCache` interface + `IndexedDbAnalysisCache`. Cell query results, grid state, final blocks, and reports are all cached through this one interface.
 - **services/export/** - `exportGeoJson.ts` (generic FeatureCollection/JSON download), `exportReport.ts` (builds the full `AnalysisReport` object and downloads it).
-- **geometry/** - projection, validation (JSTS `IsValidOp`/repair), spatial index, noding, graph, 2-core, polygonization, indicators, clipping, districts, logical levels. Pure functions and classes; no browser globals.
+- **geometry/** - projection, validation (JSTS `IsValidOp`/repair), spatial index, noding, graph, 2-core, polygonization (incl. `resolveFaceNesting`), boundary-ring closure (`boundaryClosure.ts`), building-based block merging (`blockMerging.ts`), shared bbox pre-filter helpers (`bbox.ts`), indicators, clipping, districts, logical levels. Pure functions and classes; no browser globals.
 - **grid/** - adaptive quadtree generation, complexity estimation, cell buffering, and the acquisition scheduler (concurrency + retry/backoff + cancellation).
 
 ## Data flow
@@ -77,7 +77,9 @@ None of these require touching a single React component - only the implementatio
 
 ## Caching model
 
-`IndexedDbAnalysisCache` uses one IndexedDB database (`urban-blocks-builder-cache`) with separate object stores for cell query results (`cellWays`), grid state, final blocks, reports, and last-updated metadata. The cache key for a cell (`buildCellCacheKey`) is a SHA-256 hash (via `crypto.subtle`, falling back to a deterministic non-cryptographic hash if unavailable) of the cell bbox plus the highway/access filters, query version, algorithm version, endpoint, and context-buffer configuration - so any configuration change naturally invalidates stale cache entries instead of silently reusing them.
+`IndexedDbAnalysisCache` uses one IndexedDB database (`urban-blocks-builder-cache`) with separate object stores for cell acquisition results (`cellData` - each entry holds both the road/waterway/railway network and the building points fetched in the same Overpass call), grid state, final blocks, reports, and last-updated metadata. The cache key for a cell (`buildCellCacheKey`) is a SHA-256 hash (via `crypto.subtle`, falling back to a deterministic non-cryptographic hash if unavailable) of the cell bbox plus **the exact Overpass query text for that cell**, query version, algorithm version, and endpoint. Keying on the query text itself, rather than enumerating individual filters, means any toggle that changes what gets requested (highway types, waterway/railway/building inclusion, access exclusions...) invalidates stale cache entries automatically - an earlier version listed filters individually and missed several when new toggles were added later.
+
+**Note**: `saveFinalBlocks`/`loadFinalBlocks`/`saveReport`/`loadReport`/`listCachedAnalyses`/`clearAnalysis` are implemented on `IndexedDbAnalysisCache` and part of the `AnalysisCache` interface, but nothing in the app currently calls them - only the per-cell (`getCellData`/`putCellData`) and whole-database (`clearAll`) paths are wired up. They look like the start of an unfinished "resume a previously completed analysis without recomputing it" feature; treat them as dead code until (and unless) that feature is built.
 
 ## Important architectural decisions
 

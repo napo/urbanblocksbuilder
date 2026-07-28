@@ -2,8 +2,15 @@ import type { AnalysisReport, GridCell, OSMWay, UrbanBlock } from '../../domain/
 
 export interface CellCacheKeyInput {
   cellBbox: [number, number, number, number]
-  highwayFilters: string[]
-  accessFilters: string[]
+  /**
+   * The exact Overpass query text for this cell (see OverpassQueryBuilder).
+   * Keying on the query itself - rather than enumerating every filter/toggle
+   * that can affect it (highway types, waterway/railway/building inclusion,
+   * access exclusions...) - means a cache entry is invalidated automatically
+   * whenever the query would actually be different, with no risk of a new
+   * toggle being added to the config without also being added here.
+   */
+  query: string
   queryVersion: string
   algorithmVersion: string
   endpoint: string
