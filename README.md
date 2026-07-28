@@ -72,7 +72,7 @@ npm install
 npm run dev
 ```
 
-Enable **"Use offline fixture data"** in the Analysis controls panel to exercise the full pipeline (grid → noding → 2-core → polygonization → indicators) without contacting Overpass - useful for demos and for verifying a change without network access.
+The pipeline supports an offline fixture mode (`fixtureMode: true` on the analysis input) that exercises the full pipeline (grid → noding → 2-core → polygonization → indicators) without contacting Overpass - see `src/tests/workers/analysisPipeline.fixture.test.ts` for an example. It's no longer exposed as a toggle in the Analysis controls panel.
 
 ## Testing
 

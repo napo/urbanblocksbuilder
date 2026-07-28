@@ -87,8 +87,6 @@ function SelectAllNone({ onAll, onNone }: { onAll: () => void; onNone: () => voi
 export function AnalysisControls({ onRun, canRun }: AnalysisControlsProps) {
   const config = useAnalysisStore((state) => state.config)
   const setConfig = useAnalysisStore((state) => state.setConfig)
-  const fixtureMode = useAnalysisStore((state) => state.fixtureMode)
-  const setFixtureMode = useAnalysisStore((state) => state.setFixtureMode)
   const isProcessing = useAnalysisStore((state) => state.isProcessing)
   const setCacheStatus = useAnalysisStore((state) => state.setCacheStatus)
 
@@ -120,12 +118,7 @@ export function AnalysisControls({ onRun, canRun }: AnalysisControlsProps) {
         work well for a typical neighbourhood-sized area.
       </p>
 
-      <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', fontWeight: 400 }}>
-        <input type="checkbox" checked={fixtureMode} onChange={(event) => setFixtureMode(event.target.checked)} />
-        Use offline fixture data (demo mode, no Overpass requests)
-      </label>
-
-      <details open>
+      <details>
         <summary>Road types</summary>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.85rem', marginTop: '0.6rem' }}>
           <fieldset style={{ display: 'grid', gap: '0.3rem' }}>
