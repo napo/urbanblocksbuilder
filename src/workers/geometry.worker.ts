@@ -2,7 +2,35 @@
 
 import { runAnalysisPipeline, CancellationError } from './analysisPipeline'
 import { IndexedDbAnalysisCache } from '../services/cache/IndexedDbAnalysisCache'
-import type { StartMessage, OutgoingWorkerMessage, AnalysisPhase } from './workerMessages'
+import type { AnalysisSnapshot } from '../services/cache/AnalysisCache'
+import type { StartMessage, OutgoingWorkerMessage, AnalysisPhase, CompletedResultPayload } from './workerMessages'
+
+function generateAnalysisId(): string {
+  return `analysis-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function buildSnapshot(payload: StartMessage['payload'], result: CompletedResultPayload): AnalysisSnapshot {
+  return {
+    analysisId: generateAnalysisId(),
+    savedAt: new Date().toISOString(),
+    area: payload.area,
+    config: payload.config,
+    districts: payload.districts,
+    districtStrategy: payload.districtStrategy,
+    blocks: result.blocks.features.map((feature) => ({
+      id: feature.properties.blockId,
+      geometry: feature.geometry,
+      properties: feature.properties,
+    })),
+    originalRoads: result.originalRoads,
+    nodedRoads: result.nodedRoads,
+    removedBranches: result.removedBranches,
+    twoCoreRoads: result.twoCoreRoads,
+    grid: result.grid,
+    districtStatistics: result.districtStatistics,
+    report: result.report,
+  }
+}
 
 let cancelled = false
 const cache = new IndexedDbAnalysisCache()
@@ -67,6 +95,12 @@ self.addEventListener('message', (event: MessageEvent<StartMessage | { type: 'ca
       }
 
       post({ type: 'completed-result', payload: result })
+
+      if (!payload.fixtureMode) {
+        cache.saveAnalysisSnapshot(buildSnapshot(payload, result)).catch(() => {
+          post({ type: 'warning', payload: { message: 'This analysis completed, but could not be saved locally for later resuming.' } })
+        })
+      }
     } catch (error) {
       if (error instanceof CancellationError || cancelled) {
         post({ type: 'cancellation-confirmed' })

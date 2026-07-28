@@ -7,6 +7,8 @@ export interface NodingInputLine {
   logicalLevel: number
   /** Metric (projected) coordinates. */
   coordinates: [number, number][]
+  /** Real OSM node ID at each coordinate, parallel to `coordinates`, when known - see OSMWay.nodeIds. */
+  nodeIds?: (string | undefined)[]
 }
 
 export interface NodedEdge {
@@ -14,6 +16,15 @@ export interface NodedEdge {
   coordinates: [number, number][]
   logicalLevel: number
   wayReferences: string[]
+  /**
+   * The real OSM node ID at this edge's first/last coordinate, when that
+   * coordinate is an original way vertex with a known ID (not a newly
+   * computed intersection point). See geometry/graph.ts, which prefers this
+   * over coordinate-proximity matching so two vertices with different known
+   * node IDs are never merged just because they happen to be close together.
+   */
+  startNodeId?: string
+  endNodeId?: string
 }
 
 export interface NodingStatistics {
@@ -39,6 +50,18 @@ function edgeKey(coordinates: [number, number][], precisionDigits: number): stri
   const forward = rounded.join('|')
   const backward = [...rounded].reverse().join('|')
   return forward < backward ? forward : backward
+}
+
+/**
+ * High-precision (sub-millimetre) coordinate key used only to re-associate a
+ * noded edge's endpoint with the OSM node ID of the original way vertex it
+ * came from. Safe to use exact-match precision here because JSTS's union
+ * leaves untouched (non-intersection) vertices bit-for-bit unchanged - only
+ * newly computed intersection points get a different coordinate, and those
+ * correctly have no original node ID to look up.
+ */
+function vertexKey([x, y]: [number, number]): string {
+  return `${x.toFixed(6)}:${y.toFixed(6)}`
 }
 
 function countRealIntersections(lines: NodingInputLine[], toleranceMeters: number): number {
@@ -248,6 +271,23 @@ export function nodeRoadNetwork(lines: NodingInputLine[], toleranceMeters: numbe
     statistics.detectedIntersections += countRealIntersections(groupLines, toleranceMeters)
 
     const validLines = groupLines.filter((line) => line.coordinates.length >= 2)
+
+    // Scoped to this logical-level group only, so a bridge/tunnel way never
+    // gets attributed a node ID shared with a ground-level way at the same
+    // real-world coordinate - they're deliberately kept topologically apart
+    // regardless (see calculateLogicalLevel), and this map only feeds the
+    // matching-level graph construction step in graph.ts.
+    const nodeIdByVertex = new Map<string, string>()
+    for (const line of validLines) {
+      if (!line.nodeIds) continue
+      for (let i = 0; i < line.coordinates.length; i += 1) {
+        const nodeId = line.nodeIds[i]
+        if (nodeId) {
+          nodeIdByVertex.set(vertexKey(line.coordinates[i]), nodeId)
+        }
+      }
+    }
+
     const jstsLines = validLines
       .map((line) => {
         try {
@@ -301,6 +341,8 @@ export function nodeRoadNetwork(lines: NodingInputLine[], toleranceMeters: numbe
         coordinates,
         logicalLevel,
         wayReferences,
+        startNodeId: nodeIdByVertex.get(vertexKey(coordinates[0])),
+        endNodeId: nodeIdByVertex.get(vertexKey(coordinates[coordinates.length - 1])),
       })
 
       const start = coordinates[0]

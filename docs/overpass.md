@@ -13,7 +13,7 @@ For a given cell bounding box `(minLon, minLat, maxLon, maxLat)`, with every tog
   way["waterway"~"^(river|stream|canal)$"]["tunnel"!="culvert"](minLat,minLon,maxLat,maxLon);
   way["railway"~"^(rail|light_rail|tram|narrow_gauge)$"](minLat,minLon,maxLat,maxLon);
 )->.separators;
-.separators out tags geom;
+.separators out body geom;
 way["building"]["building"!="no"](minLat,minLon,maxLat,maxLon)->.buildings;
 .buildings out center;
 ```
@@ -23,7 +23,7 @@ way["building"]["building"!="no"](minLat,minLon,maxLat,maxLon)->.buildings;
 - One `["access"!="value"]` clause per configured access-exclusion value (default: `no`, `private`).
 - **Surface waterways and at-grade railways** (`includeWaterway`/`includeRailway`, both on by default) are requested as extra block separators, in the same call as the roads - a stream or rail line can divide two blocks with no parallel road nearby. `waterway` excludes culverts (`tunnel!=culvert`) so only genuinely surface watercourses count; `railway` naturally excludes subway (underground) and the `abandoned`/`disused`/`construction` lifecycle tags by only matching `rail|light_rail|tram|narrow_gauge`.
 - **Building footprints** (`mergeBuildinglessBlocks`, on by default) are fetched as a second named result set, output with `out center` - only a point per building, not its outline - and used to fold any resulting block with no building inside it into a neighbour (see `docs/algorithm.md`, "Building-based merging"). Turning this toggle off removes the `.buildings` clause entirely, so no building data is downloaded at all.
-- `out tags geom` (for the roads/waterway/railway set) returns every tag on each matched way plus inline geometry, so no separate geometry request is needed and no ways without usable geometry are ever returned by Overpass in the first place.
+- `out body geom` (for the roads/waterway/railway set) returns each way's tags, its `nodes` array (the real OSM node ID at every vertex, in order) and its inline `geometry`, so no separate geometry request is needed and no ways without usable geometry are ever returned by Overpass in the first place. The `nodes` array is what lets the noding step distinguish a genuine shared intersection from two unrelated vertices that simply happen to be close together - see `docs/algorithm.md`, "Graph construction", and `services/overpass/OverpassParser.ts::parseOverpassWays`. (An earlier version used `out tags geom`, a lighter mode that omits `nodes` entirely - fine for geometry, but it meant the noding step had no way to know real node identity and had to rely purely on coordinate-proximity snapping everywhere, which is what caused the bridge/tunnel-adjacent false-connection edge case described in the algorithm docs.)
 
 ## Endpoint configuration
 

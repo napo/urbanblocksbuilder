@@ -1,4 +1,5 @@
-import type { AnalysisReport, GridCell, OSMWay, UrbanBlock } from '../../domain/types'
+import type { AnalysisArea, AnalysisConfig, AnalysisReport, NamedFeatureCollection, OSMWay, UrbanBlock } from '../../domain/types'
+import type { District, DistrictAssignmentStrategy, DistrictStatistics } from '../../domain/district'
 
 export interface CellCacheKeyInput {
   cellBbox: [number, number, number, number]
@@ -17,15 +18,41 @@ export interface CellCacheKeyInput {
   contextBufferMeters: number
 }
 
-export interface CachedAnalysisSummary {
-  analysisId: string
-  updatedAt: string
-}
-
 /** Everything downloaded for one grid cell in a single Overpass call: the road/waterway/railway network plus building locations. */
 export interface CellAcquisitionData {
   ways: OSMWay[]
   buildingPoints: [number, number][]
+}
+
+/** Lightweight metadata for listing saved analyses without loading their full geometry. */
+export interface AnalysisSnapshotSummary {
+  analysisId: string
+  savedAt: string
+  areaName: string
+  areaKm2: number
+  blockCount: number
+}
+
+/**
+ * A complete, previously-computed analysis result, saved so it can be
+ * reopened instantly - without re-downloading from Overpass or recomputing
+ * the geometry pipeline - later in the same browser.
+ */
+export interface AnalysisSnapshot {
+  analysisId: string
+  savedAt: string
+  area: AnalysisArea
+  config: AnalysisConfig
+  districts: District[]
+  districtStrategy: DistrictAssignmentStrategy
+  blocks: UrbanBlock[]
+  originalRoads: NamedFeatureCollection
+  nodedRoads: NamedFeatureCollection
+  removedBranches: NamedFeatureCollection
+  twoCoreRoads: NamedFeatureCollection
+  grid: NamedFeatureCollection<{ id: string; state: string; depth: number }>
+  districtStatistics: DistrictStatistics[]
+  report: AnalysisReport
 }
 
 /**
@@ -38,16 +65,10 @@ export interface AnalysisCache {
   getCellData(key: string): Promise<CellAcquisitionData | null>
   putCellData(key: string, data: CellAcquisitionData): Promise<void>
 
-  saveGridState(analysisId: string, cells: GridCell[]): Promise<void>
-  loadGridState(analysisId: string): Promise<GridCell[] | null>
+  saveAnalysisSnapshot(snapshot: AnalysisSnapshot): Promise<void>
+  listAnalysisSnapshots(): Promise<AnalysisSnapshotSummary[]>
+  loadAnalysisSnapshot(analysisId: string): Promise<AnalysisSnapshot | null>
+  deleteAnalysisSnapshot(analysisId: string): Promise<void>
 
-  saveFinalBlocks(analysisId: string, blocks: UrbanBlock[]): Promise<void>
-  loadFinalBlocks(analysisId: string): Promise<UrbanBlock[] | null>
-
-  saveReport(analysisId: string, report: AnalysisReport): Promise<void>
-  loadReport(analysisId: string): Promise<AnalysisReport | null>
-
-  clearAnalysis(analysisId: string): Promise<void>
   clearAll(): Promise<void>
-  listCachedAnalyses(): Promise<CachedAnalysisSummary[]>
 }

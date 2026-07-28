@@ -16,18 +16,31 @@ export interface OverpassResponse {
 export function parseOverpassWays(response: OverpassResponse): OSMWay[] {
   return (response.elements ?? [])
     .filter((element) => element.type === 'way' && (element.geometry?.length ?? 0) >= 2)
-    .map((element) => ({
-      id: `${element.id}`,
-      tags: element.tags ?? {},
-      coordinates: (element.geometry ?? []).map((point) => [point.lon, point.lat] as [number, number]),
-      logicalLevel: 0,
-      sourceCellIds: [] as string[],
-      originalGeometry: {
-        type: 'LineString' as const,
-        coordinates: (element.geometry ?? []).map((point) => [point.lon, point.lat] as [number, number]),
-      },
-      status: 'downloaded' as const,
-    }))
+    .map((element) => {
+      const coordinates = (element.geometry ?? []).map((point) => [point.lon, point.lat] as [number, number])
+      // `element.nodes` (present when the query used "out body geom" - see
+      // OverpassQueryBuilder) is index-aligned with `element.geometry`: the
+      // same real OSM node ID structure Overpass uses for the way's vertex
+      // list. Only kept when the lengths actually match, so a malformed or
+      // "tags"-only response (no node refs) degrades to "unknown identity"
+      // rather than silently pairing the wrong ID with the wrong vertex.
+      const nodeIds = element.nodes && element.nodes.length === coordinates.length
+        ? element.nodes.map((nodeId) => `${nodeId}`)
+        : undefined
+      return {
+        id: `${element.id}`,
+        tags: element.tags ?? {},
+        coordinates,
+        nodeIds,
+        logicalLevel: 0,
+        sourceCellIds: [] as string[],
+        originalGeometry: {
+          type: 'LineString' as const,
+          coordinates,
+        },
+        status: 'downloaded' as const,
+      }
+    })
 }
 
 /**

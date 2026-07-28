@@ -57,4 +57,40 @@ describe('nodeRoadNetwork', () => {
     expect(result.statistics.detectedIntersections).toBe(1)
     expect(result.edges.length).toBe(4)
   })
+
+  it('attributes a known OSM node ID to the edge endpoint it came from', () => {
+    const lines = [
+      { wayId: 'road-a', logicalLevel: 0, coordinates: [[0, 0], [100, 0]] as [number, number][], nodeIds: ['n1', 'n2'] },
+    ]
+
+    const result = nodeRoadNetwork(lines, 1)
+
+    expect(result.edges).toHaveLength(1)
+    expect(result.edges[0].startNodeId).toBe('n1')
+    expect(result.edges[0].endNodeId).toBe('n2')
+  })
+
+  it('leaves a newly computed intersection point without a node ID, even when both crossing ways have known IDs', () => {
+    const lines = [
+      { wayId: 'road-a', logicalLevel: 0, coordinates: [[-50, 0], [50, 0]] as [number, number][], nodeIds: ['a-start', 'a-end'] },
+      { wayId: 'road-b', logicalLevel: 0, coordinates: [[0, -50], [0, 50]] as [number, number][], nodeIds: ['b-start', 'b-end'] },
+    ]
+
+    const result = nodeRoadNetwork(lines, 1)
+
+    // The intersection at (0,0) is a new point, not an original vertex of either way.
+    const endpointNodeIds = result.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])
+    expect(endpointNodeIds.filter(Boolean).sort()).toEqual(['a-end', 'a-start', 'b-end', 'b-start'])
+  })
+
+  it('does not attribute a node ID when a way has no nodeIds at all (fixture/demo data)', () => {
+    const lines = [
+      { wayId: 'road-a', logicalLevel: 0, coordinates: [[0, 0], [100, 0]] as [number, number][] },
+    ]
+
+    const result = nodeRoadNetwork(lines, 1)
+
+    expect(result.edges[0].startNodeId).toBeUndefined()
+    expect(result.edges[0].endNodeId).toBeUndefined()
+  })
 })

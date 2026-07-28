@@ -1,25 +1,33 @@
-import type { AnalysisCache, CachedAnalysisSummary, CellAcquisitionData, CellCacheKeyInput } from './AnalysisCache'
-import type { AnalysisReport, GridCell, UrbanBlock } from '../../domain/types'
+import type { AnalysisCache, AnalysisSnapshot, AnalysisSnapshotSummary, CellAcquisitionData, CellCacheKeyInput } from './AnalysisCache'
 
 const DB_NAME = 'urban-blocks-builder-cache'
-// v2 adds the cellData store (replaces cellWays: cached ways now come bundled
+// v2 added the cellData store (replaces cellWays: cached ways now come bundled
 // with building points from the same Overpass call - see CellAcquisitionData).
-// The old cellWays store is left in place, unused, rather than migrated.
-const DB_VERSION = 2
+// v3 replaces the never-used gridState/finalBlocks/reports stores (nothing
+// ever called their save/load methods - see docs/architecture.md) with a
+// single analysisSnapshots store backing the "resume a saved analysis"
+// feature. Old stores are dropped on upgrade since they never held real data.
+const DB_VERSION = 3
+const MAX_SAVED_ANALYSES = 10
 
 const STORES = {
   cellData: 'cellData',
-  gridState: 'gridState',
-  finalBlocks: 'finalBlocks',
-  reports: 'reports',
+  analysisSnapshots: 'analysisSnapshots',
   meta: 'meta',
 } as const
+
+const RETIRED_STORES = ['cellWays', 'gridState', 'finalBlocks', 'reports']
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const db = request.result
+      for (const storeName of RETIRED_STORES) {
+        if (db.objectStoreNames.contains(storeName)) {
+          db.deleteObjectStore(storeName)
+        }
+      }
       for (const storeName of Object.values(STORES)) {
         if (!db.objectStoreNames.contains(storeName)) {
           db.createObjectStore(storeName)
@@ -94,48 +102,36 @@ export class IndexedDbAnalysisCache implements AnalysisCache {
     await this.touchMeta('__cells__')
   }
 
-  async saveGridState(analysisId: string, cells: GridCell[]): Promise<void> {
+  async saveAnalysisSnapshot(snapshot: AnalysisSnapshot): Promise<void> {
     const db = await this.db()
-    await runTransaction(db, STORES.gridState, 'readwrite', (store) => store.put(cells, analysisId))
-    await this.touchMeta(analysisId)
+    await runTransaction(db, STORES.analysisSnapshots, 'readwrite', (store) => store.put(snapshot, snapshot.analysisId))
+    await this.touchMeta('__cells__')
+    await this.pruneOldSnapshots(db)
   }
 
-  async loadGridState(analysisId: string): Promise<GridCell[] | null> {
+  async listAnalysisSnapshots(): Promise<AnalysisSnapshotSummary[]> {
     const db = await this.db()
-    const result = await runTransaction<GridCell[] | undefined>(db, STORES.gridState, 'readonly', (store) => store.get(analysisId))
+    const snapshots = await runTransaction<AnalysisSnapshot[]>(db, STORES.analysisSnapshots, 'readonly', (store) => store.getAll())
+    return snapshots
+      .map((snapshot) => ({
+        analysisId: snapshot.analysisId,
+        savedAt: snapshot.savedAt,
+        areaName: snapshot.area.name ?? `${snapshot.area.source} area`,
+        areaKm2: snapshot.area.areaKm2,
+        blockCount: snapshot.blocks.length,
+      }))
+      .sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+  }
+
+  async loadAnalysisSnapshot(analysisId: string): Promise<AnalysisSnapshot | null> {
+    const db = await this.db()
+    const result = await runTransaction<AnalysisSnapshot | undefined>(db, STORES.analysisSnapshots, 'readonly', (store) => store.get(analysisId))
     return result ?? null
   }
 
-  async saveFinalBlocks(analysisId: string, blocks: UrbanBlock[]): Promise<void> {
+  async deleteAnalysisSnapshot(analysisId: string): Promise<void> {
     const db = await this.db()
-    await runTransaction(db, STORES.finalBlocks, 'readwrite', (store) => store.put(blocks, analysisId))
-    await this.touchMeta(analysisId)
-  }
-
-  async loadFinalBlocks(analysisId: string): Promise<UrbanBlock[] | null> {
-    const db = await this.db()
-    const result = await runTransaction<UrbanBlock[] | undefined>(db, STORES.finalBlocks, 'readonly', (store) => store.get(analysisId))
-    return result ?? null
-  }
-
-  async saveReport(analysisId: string, report: AnalysisReport): Promise<void> {
-    const db = await this.db()
-    await runTransaction(db, STORES.reports, 'readwrite', (store) => store.put(report, analysisId))
-    await this.touchMeta(analysisId)
-  }
-
-  async loadReport(analysisId: string): Promise<AnalysisReport | null> {
-    const db = await this.db()
-    const result = await runTransaction<AnalysisReport | undefined>(db, STORES.reports, 'readonly', (store) => store.get(analysisId))
-    return result ?? null
-  }
-
-  async clearAnalysis(analysisId: string): Promise<void> {
-    const db = await this.db()
-    await runTransaction(db, STORES.gridState, 'readwrite', (store) => store.delete(analysisId))
-    await runTransaction(db, STORES.finalBlocks, 'readwrite', (store) => store.delete(analysisId))
-    await runTransaction(db, STORES.reports, 'readwrite', (store) => store.delete(analysisId))
-    await runTransaction(db, STORES.meta, 'readwrite', (store) => store.delete(analysisId))
+    await runTransaction(db, STORES.analysisSnapshots, 'readwrite', (store) => store.delete(analysisId))
   }
 
   async clearAll(): Promise<void> {
@@ -145,22 +141,21 @@ export class IndexedDbAnalysisCache implements AnalysisCache {
     }
   }
 
-  async listCachedAnalyses(): Promise<CachedAnalysisSummary[]> {
-    const db = await this.db()
-    const keys = await runTransaction<IDBValidKey[]>(db, STORES.meta, 'readonly', (store) => store.getAllKeys())
-    const summaries: CachedAnalysisSummary[] = []
-    for (const key of keys) {
-      if (typeof key !== 'string' || key === '__cells__') {
-        continue
-      }
-      const updatedAt = await runTransaction<string | undefined>(db, STORES.meta, 'readonly', (store) => store.get(key))
-      summaries.push({ analysisId: key, updatedAt: updatedAt ?? '' })
+  /** Keeps the saved-analyses list from growing without bound - oldest snapshots are dropped first. */
+  private async pruneOldSnapshots(db: IDBDatabase): Promise<void> {
+    const snapshots = await runTransaction<AnalysisSnapshot[]>(db, STORES.analysisSnapshots, 'readonly', (store) => store.getAll())
+    if (snapshots.length <= MAX_SAVED_ANALYSES) {
+      return
     }
-    return summaries
+    const oldestFirst = [...snapshots].sort((a, b) => a.savedAt.localeCompare(b.savedAt))
+    const toRemove = oldestFirst.slice(0, snapshots.length - MAX_SAVED_ANALYSES)
+    for (const snapshot of toRemove) {
+      await runTransaction(db, STORES.analysisSnapshots, 'readwrite', (store) => store.delete(snapshot.analysisId))
+    }
   }
 
-  private async touchMeta(analysisId: string): Promise<void> {
+  private async touchMeta(key: string): Promise<void> {
     const db = await this.db()
-    await runTransaction(db, STORES.meta, 'readwrite', (store) => store.put(new Date().toISOString(), analysisId))
+    await runTransaction(db, STORES.meta, 'readwrite', (store) => store.put(new Date().toISOString(), key))
   }
 }

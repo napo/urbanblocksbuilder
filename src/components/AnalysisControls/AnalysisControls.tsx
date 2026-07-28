@@ -105,7 +105,7 @@ export function AnalysisControls({ onRun, canRun }: AnalysisControlsProps) {
   }
 
   const clearAllCache = async () => {
-    if (!window.confirm('Clear all locally cached Overpass responses and analysis results? This cannot be undone.')) {
+    if (!window.confirm('Clear all locally cached Overpass responses and saved analyses? This cannot be undone.')) {
       return
     }
     await cache.clearAll()
@@ -196,8 +196,9 @@ export function AnalysisControls({ onRun, canRun }: AnalysisControlsProps) {
         <summary>Local cache</summary>
         <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.6rem' }}>
           <p style={{ fontSize: '0.8rem', margin: 0 }}>
-            Overpass responses and results are cached in your browser (IndexedDB) so re-running the same area doesn't
-            re-download it.
+            Overpass responses are cached in your browser (IndexedDB) so re-running the same area doesn't re-download
+            it, and completed analyses are saved here too so they can be reopened later (see "Saved analyses" on the
+            area step). Clearing the cache removes both.
           </p>
           <button type="button" className="secondary" style={{ justifySelf: 'start' }} onClick={() => void clearAllCache()}>
             Clear all local cache

@@ -24,6 +24,14 @@ export interface OverpassQueryOptions {
  * avoids doubling the number of Overpass requests. They are used to merge
  * any block with no building inside it into a neighbour (see
  * blockMerging.ts), not for topology, so a point is all that's needed.
+ *
+ * The separator set is printed with `out body geom;` rather than `out tags
+ * geom;` specifically so the response includes each way's `nodes` array
+ * (the real OSM node IDs, in order) alongside its `geometry` - "tags"
+ * verbosity omits node references entirely. Those IDs let the noding step
+ * tell an actual shared OSM node apart from two unrelated vertices that
+ * simply happen to fall within the snapping tolerance of each other (see
+ * geometry/graph.ts and docs/algorithm.md, "Graph construction").
  */
 export class OverpassQueryBuilder {
   build({ bbox, config = defaultAnalysisConfig }: OverpassQueryOptions): string {
@@ -62,7 +70,7 @@ export class OverpassQueryBuilder {
       '(',
       ...separatorClauses,
       ')->.separators;',
-      '.separators out tags geom;',
+      '.separators out body geom;',
     ]
 
     if (config.mergeBuildinglessBlocks) {

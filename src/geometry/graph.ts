@@ -43,8 +43,16 @@ export function buildGraphFromNodedEdges(edges: NodedEdge[], toleranceMeters: nu
   const nodes = new Map<string, GraphNode>()
   const graphEdges: GraphEdge[] = []
 
-  const getOrCreateNode = (coordinate: [number, number]): GraphNode => {
-    const key = nodeKey(coordinate, toleranceMeters)
+  // An endpoint with a known real OSM node ID is keyed by that ID, exactly -
+  // two endpoints only become the same graph node if they really are the
+  // same OSM node, regardless of how far apart their (possibly imprecise)
+  // coordinates are, and two endpoints with *different* known IDs are never
+  // merged just because they happen to land within the coordinate-rounding
+  // tolerance of each other. Only endpoints with no known ID (synthetic
+  // boundary-ring points, fixture/demo data) fall back to the coordinate
+  // proximity heuristic below, exactly as before this ID-aware path existed.
+  const getOrCreateNode = (coordinate: [number, number], osmNodeId: string | undefined): GraphNode => {
+    const key = osmNodeId ? `osm:${osmNodeId}` : nodeKey(coordinate, toleranceMeters)
     let node = nodes.get(key)
     if (!node) {
       node = { id: key, coordinates: coordinate, degree: 0 }
@@ -57,8 +65,8 @@ export function buildGraphFromNodedEdges(edges: NodedEdge[], toleranceMeters: nu
     if (edge.coordinates.length < 2) {
       continue
     }
-    const start = getOrCreateNode(edge.coordinates[0])
-    const end = getOrCreateNode(edge.coordinates[edge.coordinates.length - 1])
+    const start = getOrCreateNode(edge.coordinates[0], edge.startNodeId)
+    const end = getOrCreateNode(edge.coordinates[edge.coordinates.length - 1], edge.endNodeId)
 
     if (start.id === end.id && edge.coordinates.length < 3) {
       continue

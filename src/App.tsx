@@ -11,6 +11,7 @@ import { ErrorPanel } from './components/ErrorPanel/ErrorPanel'
 import { Stepper, type WizardStep } from './components/Wizard/Stepper'
 import { Tabs } from './components/Wizard/Tabs'
 import { AboutModal } from './components/About/AboutModal'
+import { SavedAnalysesPanel } from './components/SavedAnalyses/SavedAnalysesPanel'
 import { useAnalysisStore } from './state/analysisStore'
 import type { AnalysisArea } from './domain/types'
 import { appName, appVersion } from './config/defaults'
@@ -214,6 +215,7 @@ function App() {
               <div className="panel">
                 <AreaSelector onAreaSelected={handleAreaConfirmed} />
               </div>
+              <SavedAnalysesPanel onLoaded={() => setWizardStep('results')} />
               <div className="panel">
                 <section aria-label="Privacy">
                   <h2>Privacy &amp; data licence</h2>

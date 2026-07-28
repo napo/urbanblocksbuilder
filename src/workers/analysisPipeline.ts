@@ -70,6 +70,25 @@ function buildFixtureWays(): OSMWay[] {
   }))
 }
 
+function coordinateKey([x, y]: [number, number]): string {
+  return `${x.toFixed(6)}:${y.toFixed(6)}`
+}
+
+/** Maps each projected coordinate of a way to its real OSM node ID, when known - see OSMWay.nodeIds. */
+function buildNodeIdLookup(metricCoordinates: [number, number][], nodeIds: (string | undefined)[] | undefined): Map<string, string> | null {
+  if (!nodeIds || nodeIds.length !== metricCoordinates.length) {
+    return null
+  }
+  const lookup = new Map<string, string>()
+  for (let i = 0; i < metricCoordinates.length; i += 1) {
+    const nodeId = nodeIds[i]
+    if (nodeId) {
+      lookup.set(coordinateKey(metricCoordinates[i]), nodeId)
+    }
+  }
+  return lookup
+}
+
 /** Clips a projected LineString to a projected area polygon, returning 0..n surviving segments. */
 function clipLineToArea(coordinates: [number, number][], areaMetric: GeoJSON.Polygon | GeoJSON.MultiPolygon): [number, number][][] {
   try {
@@ -199,8 +218,16 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
   for (const way of dedupedWays) {
     const metricLine = projectGeometry({ type: 'LineString', coordinates: way.coordinates }, projection) as GeoJSON.LineString
     const metricCoordinates = metricLine.coordinates as [number, number][]
+
+    // Clipping can drop vertices or insert new ones at the boundary, so
+    // node IDs are re-attributed by exact coordinate match afterwards rather
+    // than assumed to stay index-aligned - clipLineToArea leaves surviving
+    // original vertices bit-for-bit unchanged, only inserting new
+    // (correctly ID-less) points where it actually cuts the line.
+    const nodeIdByCoordinate = buildNodeIdLookup(metricCoordinates, way.nodeIds)
     for (const segment of clipLineToArea(metricCoordinates, areaMetric)) {
-      metricLines.push({ wayId: way.id, logicalLevel: way.logicalLevel, coordinates: segment })
+      const nodeIds = nodeIdByCoordinate ? segment.map((coordinate) => nodeIdByCoordinate.get(coordinateKey(coordinate))) : undefined
+      metricLines.push({ wayId: way.id, logicalLevel: way.logicalLevel, coordinates: segment, nodeIds })
     }
   }
 

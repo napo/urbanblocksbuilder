@@ -1,5 +1,8 @@
 export type AnalysisSource = 'geocoder' | 'upload' | 'rectangle' | 'polygon' | 'radius' | 'fixture'
 
+/** A GeoJSON FeatureCollection whose feature properties have a known shape, rather than the spec's nullable "any". */
+export type NamedFeatureCollection<P = Record<string, unknown>> = GeoJSON.FeatureCollection<GeoJSON.Geometry, P>
+
 export type AnalysisAreaGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon
 
 export interface AnalysisArea {
@@ -26,6 +29,14 @@ export interface OSMWay {
   id: string
   tags: Record<string, string>
   coordinates: [number, number][]
+  /**
+   * The real OSM node ID at each coordinate, parallel to `coordinates`, when
+   * the Overpass response included it (`out body geom` - see
+   * OverpassQueryBuilder). `undefined` entries mean that vertex's identity is
+   * unknown (e.g. fixture/demo data) and topology for it falls back to
+   * coordinate-proximity matching - see geometry/graph.ts.
+   */
+  nodeIds?: (string | undefined)[]
   logicalLevel: number
   sourceCellIds: string[]
   originalGeometry: GeoJSON.LineString

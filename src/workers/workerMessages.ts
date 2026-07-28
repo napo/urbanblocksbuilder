@@ -4,9 +4,12 @@ import type {
   AnalysisProgress,
   AnalysisReport,
   GridCell,
+  NamedFeatureCollection,
   UrbanBlockProperties,
 } from '../domain/types'
 import type { District, DistrictAssignmentStrategy, DistrictStatistics } from '../domain/district'
+
+export type { NamedFeatureCollection }
 
 export const ANALYSIS_PHASES = [
   'Area validation',
@@ -63,8 +66,6 @@ export interface WarningMessage extends WorkerMessage {
   type: 'warning'
   payload: { message: string }
 }
-
-export type NamedFeatureCollection<P = Record<string, unknown>> = GeoJSON.FeatureCollection<GeoJSON.Geometry, P>
 
 export interface CompletedResultPayload {
   blocks: GeoJSON.FeatureCollection<GeoJSON.Polygon, UrbanBlockProperties>
