@@ -20,11 +20,11 @@ The core idea behind this project - iteratively pruning dead-end streets from th
 - **Surface waterways and railways as extra separators**: rivers, streams, canals, and at-grade rail lines divide blocks just like roads do, even with no parallel road nearby - on by default, toggleable.
 - **Boundary-aware block closure**: the selection boundary itself is fed into the road network as a closing edge, so a street that dangles out of the selected area closes the block against the boundary instead of leaving an unexplained gap - the result always tiles the whole selected area.
 - **Building-based block merging**: any block with no building inside it (a park, a car park, a roundabout island, a divided road's median...) is folded into whichever neighbouring block it shares the longest border with, on by default, toggleable.
-- **Real topological processing**: JSTS-based noding (with a snapping tolerance and logical-level awareness for bridges/tunnels/layers), graph construction, recursive 2-core extraction, JSTS Polygonizer-based block generation, and nested-face correction - not a placeholder pipeline.
+- **Real topological processing**: JSTS-based noding (with a snapping tolerance and logical-level awareness for bridges/tunnels/layers), OSM-node-ID-aware graph construction, recursive 2-core extraction, JSTS Polygonizer-based block generation, and nested-face correction - not a placeholder pipeline.
 - **Geometric indicators**: area, perimeter and Polsby-Popper compactness computed in a local metric (UTM) projection, never in raw longitude/latitude degrees.
 - **Diagnostic flags**: tiny artifacts, unusually large polygons, unrepaired invalid geometries, boundary-closed edges, and still-buildingless blocks are all flagged and shown, never silently dropped.
 - **Optional district analysis**: upload district boundaries and associate them with urban blocks using largest-overlap, point-on-surface, or proportional-intersection strategies, with full per-district statistics.
-- **Local-first**: IndexedDB caching of Overpass responses and results, GeoJSON/report export, and an offline fixture mode for demos without any network access.
+- **Local-first**: IndexedDB caching of Overpass responses, automatic saving of completed analyses for instant reloading later, GeoJSON/report export, and an offline fixture mode for demos without any network access.
 - **Privacy by design**: uploaded files never leave the browser; Overpass queries only ever cover the requested area; cache is local and can be cleared at any time.
 
 ## Screenshots: Trento, 500 m radius
@@ -80,7 +80,7 @@ Enable **"Use offline fixture data"** in the Analysis controls panel to exercise
 npx vitest run
 ```
 
-Tests cover GeoJSON normalization/validation, projection, logical-level classification, JSTS noding (T-junctions, same-level crossings, bridge/tunnel isolation), 2-core extraction (terminal branch removal, recursive chains, ring preservation), polygonization (single square, two adjacent squares, nested-face correction), the known roundabout-island and divided-road-median artifacts and their resolution via building-based merging (`tests/geometry/knownArtifacts.test.ts`), district assignment (largest-overlap, point-on-surface, intersection, including blocks straddling two districts), the adaptive grid (quadtree subdivision, buffering), OSM way deduplication, Overpass query building (including the waterway/railway/building clauses), the Overpass retry/cache-key logic, worker/grid-scheduler cancellation, and export/report metadata. See "Known limitations" below for what is not yet covered.
+Tests cover GeoJSON normalization/validation, projection, logical-level classification, JSTS noding (T-junctions, same-level crossings, bridge/tunnel isolation, OSM-node-ID attribution), OSM-node-ID-aware graph construction (`tests/geometry/graph.test.ts` - known-ID vertices never falsely merge or fail to merge based on proximity alone), 2-core extraction (terminal branch removal, recursive chains, ring preservation), polygonization (single square, two adjacent squares, nested-face correction), the known roundabout-island and divided-road-median artifacts and their resolution via building-based merging (`tests/geometry/knownArtifacts.test.ts`), district assignment (largest-overlap, point-on-surface, intersection, including blocks straddling two districts), the adaptive grid (quadtree subdivision, buffering), OSM way deduplication and node-ID parsing, Overpass query building (including the waterway/railway/building clauses), the Overpass retry/cache-key logic, saved-analysis snapshots (save/list/load/delete/retention cap, against a real IndexedDB via `fake-indexeddb`), worker/grid-scheduler cancellation, and export/report metadata. See "Limitations" below for what is not yet covered.
 
 ## Production build
 
@@ -183,7 +183,9 @@ All input/output is WGS84 (EPSG:4326). Internally, the worker picks a UTM zone f
 
 ## Bridges, tunnels, and logical levels
 
-Each OSM way is assigned a logical level from `tunnel`, `bridge`, `layer`, and `covered` tags (`geometry/logicalLayer.ts`). Noding groups ways by logical level and only nodes (splits at intersections) ways within the same level - a bridge or tunnel crossing a surface road never becomes topologically connected to it, even though their 2D geometries cross. **Known edge case**: a road's ground-level approach ending very close (within the snapping tolerance) to the exact point a bridge/tunnel begins can, in rare cases, weld onto an unrelated feature at the same coordinates instead of being pruned as a dead end - see `docs/algorithm.md` for a real example (a road's pre-bridge approach snapping onto the river passing underneath).
+Each OSM way is assigned a logical level from `tunnel`, `bridge`, `layer`, and `covered` tags (`geometry/logicalLayer.ts`). Noding groups ways by logical level and only nodes (splits at intersections) ways within the same level - a bridge or tunnel crossing a surface road never becomes topologically connected to it, even though their 2D geometries cross.
+
+Within a level, connectivity is decided by real OSM node identity, not just coordinate proximity: Overpass is queried with `out body geom` so every way carries its real node IDs (`docs/overpass.md`), and `geometry/graph.ts` merges two endpoints into the same graph node only when they share a known ID (or, for geometry with no known ID - the boundary ring, fixture data - falls back to coordinate-tolerance matching, as before). This closed a previously-known edge case where a road's ground-level approach ending very close to the exact point a bridge/tunnel begins could weld onto an unrelated feature at the same coordinates instead of being pruned as a dead end - see `docs/algorithm.md`, step 7, for the real example that surfaced it (a road's pre-bridge approach snapping onto the river passing underneath) and how node identity fixes it.
 
 ## Boundary-aware closure and building-based merging
 
@@ -203,19 +205,22 @@ Uses the JSTS `Polygonizer` on the noded, 2-core-reduced network, followed by a 
 
 Districts (from upload, geocoding, or future OSM-boundary sources) never influence road-network topology; blocks are always computed globally first. Every block/district pair is first ruled out cheaply by a bounding-box check before the real geometric test runs, so cost scales with how many blocks and districts actually overlap, not `blocks x districts` unconditionally. Three assignment strategies are implemented: largest area overlap (default), point-on-surface containment, and a proportional geometric-intersection allocation used specifically for district-level statistics (so a block that straddles a boundary contributes to both districts' totals proportionally, without ever splitting the block's own geometry or its reported area).
 
+## Saved analyses
+
+Every completed (non-fixture) analysis is automatically saved to the browser's local cache as a snapshot - area, configuration, blocks, road layers, district statistics, and report. The "Saved analyses" panel on the area-selection step lists them (newest first) and can reload one instantly - nothing is re-downloaded from Overpass or recomputed, it's the exact same result exactly as it was. Up to 10 are kept; saving an 11th quietly drops the oldest. See `docs/architecture.md`, "Caching model".
+
 ## Privacy
 
 - Uploaded GeoJSON files are processed entirely client-side and are never uploaded to any application server.
 - Overpass queries only ever request the bounding boxes needed for the selected analysis area.
-- The analysis cache (Overpass responses, grid state, results, reports) is stored in the browser's IndexedDB and can be cleared at any time from the Analysis controls panel.
+- The analysis cache (Overpass responses and saved analyses) is stored in the browser's IndexedDB and can be cleared at any time from the Analysis controls panel.
 
 ## Limitations
 
 - **UTM zone selection is single-zone**: an area straddling a UTM zone boundary, or at extreme latitudes, uses one zone chosen from the area centre; distortion grows with distance from that zone. A polar/local-alternative projection is not yet implemented.
 - **Complexity thresholds are heuristic defaults** (`config/thresholds.ts`), not calibrated against real Overpass traffic - they must be tuned with real-world testing before being treated as authoritative.
-- **OSM node IDs are not currently preserved** through the Overpass parser, so logical-level grouping and geometric intersection are the noding heuristic rather than exact OSM-topology node matching; this is flagged in `docs/algorithm.md`. A narrow, concretely-observed consequence: a road's ground-level approach ending very close to a bridge/tunnel's start point can weld onto an unrelated feature at the same coordinates instead of being pruned as a dead end (see `docs/algorithm.md`).
+- **Node identity is only as good as what Overpass returns.** Graph construction prefers real OSM node IDs (see "Bridges, tunnels, and logical levels") but still falls back to coordinate-proximity matching for any vertex without one - synthetic geometry (the boundary-ring closure line, fixture/demo data) and, in principle, a malformed or truncated Overpass response. That fallback path keeps the same characteristics it always had: generally correct, but not immune to an occasional false-proximity match.
 - **Roundabout islands and divided-road medians are not detected as such** - they polygonize as their own ordinary small faces and are only kept from looking like real blocks because the building-based merge happens to fold them into a neighbour (they have no building of their own). This works in practice but is a side effect of a general rule, not a targeted fix; see `docs/algorithm.md`, "Building-based merging".
-- **The per-cell Overpass/building cache has no analysis-level counterpart yet**: `AnalysisCache`'s `saveFinalBlocks`/`loadFinalBlocks`/`saveReport`/`loadReport`/`listCachedAnalyses`/`clearAnalysis` are implemented but never called - there is no "resume a previous analysis" UI yet, only per-cell request caching.
 - **Bundle size**: the production build's main and worker chunks exceed Vite's 500 kB warning threshold (JSTS + Turf + MapLibre are inherently large). Code-splitting is a follow-up, not yet implemented.
 - District boundary upload currently supports GeoJSON only (no direct OSM-boundary download yet).
 
