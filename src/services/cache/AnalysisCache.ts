@@ -15,6 +15,12 @@ export interface CachedAnalysisSummary {
   updatedAt: string
 }
 
+/** Everything downloaded for one grid cell in a single Overpass call: the road/waterway/railway network plus building locations. */
+export interface CellAcquisitionData {
+  ways: OSMWay[]
+  buildingPoints: [number, number][]
+}
+
 /**
  * Cache abstraction so the geometry worker and UI never talk to IndexedDB
  * directly. This is the seam that would let caching move to a backend
@@ -22,8 +28,8 @@ export interface CachedAnalysisSummary {
  */
 export interface AnalysisCache {
   buildCellCacheKey(input: CellCacheKeyInput): Promise<string>
-  getCellWays(key: string): Promise<OSMWay[] | null>
-  putCellWays(key: string, ways: OSMWay[]): Promise<void>
+  getCellData(key: string): Promise<CellAcquisitionData | null>
+  putCellData(key: string, data: CellAcquisitionData): Promise<void>
 
   saveGridState(analysisId: string, cells: GridCell[]): Promise<void>
   loadGridState(analysisId: string): Promise<GridCell[] | null>

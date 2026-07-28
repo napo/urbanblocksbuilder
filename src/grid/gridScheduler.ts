@@ -1,8 +1,8 @@
 import type { AnalysisConfig, GridCell, OSMWay } from '../domain/types'
 import { bufferGridCell } from './gridBuffer'
-import { OverpassClient, parseOverpassWays } from '../services/overpass/OverpassClient'
+import { OverpassClient, parseOverpassWays, parseOverpassBuildingCenters } from '../services/overpass/OverpassClient'
 import { OverpassRequestError } from '../services/overpass/OverpassErrors'
-import type { AnalysisCache } from '../services/cache/AnalysisCache'
+import type { AnalysisCache, CellAcquisitionData } from '../services/cache/AnalysisCache'
 
 export interface GridSchedulerCallbacks {
   onCellStateChange: (cell: GridCell) => void
@@ -20,6 +20,7 @@ export interface GridSchedulerOptions {
 
 export interface GridScheduleResult {
   ways: OSMWay[]
+  buildingPoints: [number, number][]
   failedCells: GridCell[]
   completedCells: number
   cacheHits: number
@@ -34,7 +35,7 @@ async function queryCellWithRetries(
   bufferedBbox: [number, number, number, number],
   options: GridSchedulerOptions,
   callbacks: GridSchedulerCallbacks,
-): Promise<{ ways: OSMWay[]; fromCache: boolean } | null> {
+): Promise<{ data: CellAcquisitionData; fromCache: boolean } | null> {
   const { config, overpassClient, cache } = options
   const query = overpassClient.buildRoadQuery(bufferedBbox)
   const cacheKey = cache
@@ -50,9 +51,9 @@ async function queryCellWithRetries(
     : null
 
   if (cache && cacheKey) {
-    const cached = await cache.getCellWays(cacheKey)
+    const cached = await cache.getCellData(cacheKey)
     if (cached) {
-      return { ways: cached, fromCache: true }
+      return { data: cached, fromCache: true }
     }
   }
 
@@ -66,10 +67,12 @@ async function queryCellWithRetries(
     try {
       const response = await overpassClient.query(bufferedBbox, query)
       const ways = parseOverpassWays(response).map((way) => ({ ...way, sourceCellIds: [cell.id] }))
+      const buildingPoints = parseOverpassBuildingCenters(response)
+      const data: CellAcquisitionData = { ways, buildingPoints }
       if (cache && cacheKey) {
-        await cache.putCellWays(cacheKey, ways)
+        await cache.putCellData(cacheKey, data)
       }
-      return { ways, fromCache: false }
+      return { data, fromCache: false }
     } catch (error) {
       lastError = error
       const isRetryable = error instanceof OverpassRequestError ? error.retryable : false
@@ -98,6 +101,7 @@ export async function runGridSchedule(
   callbacks: GridSchedulerCallbacks,
 ): Promise<GridScheduleResult> {
   const ways: OSMWay[] = []
+  const buildingPoints: [number, number][] = []
   const failedCells: GridCell[] = []
   let completedCells = 0
   let cacheHits = 0
@@ -119,9 +123,10 @@ export async function runGridSchedule(
       const result = await queryCellWithRetries(cell, buffered.bbox, options, callbacks)
 
       if (result) {
-        ways.push(...result.ways)
+        ways.push(...result.data.ways)
+        buildingPoints.push(...result.data.buildingPoints)
         cell.state = 'Completed'
-        cell.waysEstimate = result.ways.length
+        cell.waysEstimate = result.data.ways.length
         if (result.fromCache) {
           cacheHits += 1
         }
@@ -139,5 +144,5 @@ export async function runGridSchedule(
   const workerCount = Math.max(1, Math.min(options.concurrency, cells.length || 1))
   await Promise.all(Array.from({ length: workerCount }, () => runNext()))
 
-  return { ways, failedCells, completedCells, cacheHits }
+  return { ways, buildingPoints, failedCells, completedCells, cacheHits }
 }

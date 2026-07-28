@@ -19,8 +19,14 @@ export const fallbackOverpassEndpoints = [
 
 export const defaultHighwayFilters = ['primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street', 'road', 'pedestrian']
 
+/** Surface (non-culvert) watercourses only - see the "tunnel"!="culvert" exclusion in OverpassQueryBuilder. */
+export const defaultWaterwayFilters = ['river', 'stream', 'canal']
+
+/** At-grade passenger/freight rail only - excludes subway (underground) and the abandoned/disused/construction lifecycle tags. */
+export const defaultRailwayFilters = ['rail', 'light_rail', 'tram', 'narrow_gauge']
+
 export const defaultAnalysisConfig: AnalysisConfig = {
-  queryVersion: 'v1',
+  queryVersion: 'v3',
   algorithmVersion,
   endpoint: defaultOverpassEndpoint,
   endpoints: fallbackOverpassEndpoints,
@@ -33,6 +39,11 @@ export const defaultAnalysisConfig: AnalysisConfig = {
   includePath: false,
   includeMotorway: false,
   includeTrunk: false,
+  includeWaterway: true,
+  waterwayFilters: defaultWaterwayFilters,
+  includeRailway: true,
+  railwayFilters: defaultRailwayFilters,
+  mergeBuildinglessBlocks: true,
   contextBufferMeters: defaultGridThresholds.contextBufferMeters,
   initialCellSizeMeters: defaultGridThresholds.initialCellSizeMeters,
   maxDepth: defaultGridThresholds.maxDepth,
@@ -92,3 +103,6 @@ export const fixtureRoads = [
     ],
   },
 ] as const
+
+/** One building at the centre of the fixture square, so it (unlike the rest of the fixture area) is never merged away by the no-buildings pass. */
+export const fixtureBuildingPoints: [number, number][] = [[0.0005, 0.0005]]

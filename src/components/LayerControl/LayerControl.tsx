@@ -4,10 +4,10 @@ import { buildLegendEntries, CHOROPLETH_PALETTES, type BlockStyleAttribute, type
 const LAYER_LABELS: Array<{ key: keyof LayerVisibility; label: string }> = [
   { key: 'analysisArea', label: 'Analysis area' },
   { key: 'districts', label: 'Districts' },
-  { key: 'grid', label: 'Technical acquisition grid' },
-  { key: 'originalRoads', label: 'Original OSM roads' },
-  { key: 'nodedRoads', label: 'Noded road network' },
-  { key: 'removedBranches', label: 'Removed terminal branches' },
+  { key: 'grid', label: 'Acquisition grid' },
+  { key: 'originalRoads', label: 'Original roads' },
+  { key: 'nodedRoads', label: 'Noded network' },
+  { key: 'removedBranches', label: 'Removed branches' },
   { key: 'twoCoreRoads', label: '2-core network' },
   { key: 'blocks', label: 'Urban blocks' },
 ]
@@ -15,6 +15,7 @@ const LAYER_LABELS: Array<{ key: keyof LayerVisibility; label: string }> = [
 export function LayerControl() {
   const layerVisibility = useAnalysisStore((state) => state.layerVisibility)
   const toggleLayer = useAnalysisStore((state) => state.toggleLayer)
+  const setAllLayersVisible = useAnalysisStore((state) => state.setAllLayersVisible)
   const blocks = useAnalysisStore((state) => state.blocks)
   const blockStyleAttribute = useAnalysisStore((state) => state.blockStyleAttribute)
   const classificationMethod = useAnalysisStore((state) => state.classificationMethod)
@@ -30,14 +31,36 @@ export function LayerControl() {
   return (
     <section aria-label="Layer control and legend" style={{ display: 'grid', gap: '0.5rem' }}>
       <h2>Layers</h2>
-      <fieldset style={{ border: '1px solid #e2e8f0', display: 'grid', gap: '0.25rem', padding: '0.5rem' }}>
-        <legend>Map layers</legend>
-        {LAYER_LABELS.map(({ key, label }) => (
-          <label key={key} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-            <input type="checkbox" checked={layerVisibility[key]} onChange={() => toggleLayer(key)} />
-            {label}
-          </label>
-        ))}
+      <fieldset style={{ border: '1px solid #e2e8f0', padding: '0.4rem 0.5rem' }}>
+        <legend style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          Map layers
+          <button type="button" className="ghost" style={{ padding: '0.1rem 0.3rem', fontSize: '0.72rem' }} onClick={() => setAllLayersVisible(true)}>
+            Select all
+          </button>
+          <button type="button" className="ghost" style={{ padding: '0.1rem 0.3rem', fontSize: '0.72rem' }} onClick={() => setAllLayersVisible(false)}>
+            Select none
+          </button>
+        </legend>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gridTemplateRows: `repeat(${Math.ceil(LAYER_LABELS.length / 2)}, auto)`,
+            gridAutoFlow: 'column',
+            columnGap: '0.5rem',
+            rowGap: '0.15rem',
+          }}
+        >
+          {LAYER_LABELS.map(({ key, label }) => (
+            <label
+              key={key}
+              style={{ display: 'grid', gridTemplateColumns: '1.1rem 1fr', alignItems: 'center', gap: '0.3rem', fontWeight: 400, fontSize: '0.78rem' }}
+            >
+              <input type="checkbox" checked={layerVisibility[key]} onChange={() => toggleLayer(key)} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <fieldset style={{ border: '1px solid #e2e8f0', display: 'grid', gap: '0.35rem', padding: '0.5rem' }}>

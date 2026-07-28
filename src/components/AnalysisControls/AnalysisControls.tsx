@@ -13,6 +13,11 @@ const ADVANCED_HIGHWAY_TOGGLES = [
   { key: 'includeTrunk', label: 'Trunk roads' },
 ] as const
 
+const SEPARATOR_TOGGLES = [
+  { key: 'includeWaterway', label: 'Surface waterways (rivers, streams, canals)' },
+  { key: 'includeRailway', label: 'Railways' },
+] as const
+
 const NUMERIC_FIELDS = [
   {
     id: 'concurrency',
@@ -140,6 +145,28 @@ export function AnalysisControls({ onRun, canRun }: AnalysisControlsProps) {
             {ADVANCED_HIGHWAY_TOGGLES.map(({ key, label }) => (
               <CheckboxRow key={key} checked={config[key]} label={label} onChange={() => setConfig({ ...config, [key]: !config[key] })} />
             ))}
+          </fieldset>
+
+          <fieldset style={{ display: 'grid', gap: '0.3rem' }}>
+            <legend>Additional separators</legend>
+            <p style={{ fontSize: '0.72rem', margin: 0 }}>
+              Divide blocks even where no road runs alongside them.
+            </p>
+            {SEPARATOR_TOGGLES.map(({ key, label }) => (
+              <CheckboxRow key={key} checked={config[key]} label={label} onChange={() => setConfig({ ...config, [key]: !config[key] })} />
+            ))}
+          </fieldset>
+
+          <fieldset style={{ display: 'grid', gap: '0.3rem' }}>
+            <legend>Building-based merging</legend>
+            <p style={{ fontSize: '0.72rem', margin: 0 }}>
+              A block with no building inside it (a park, a car park...) is absorbed into its longest-bordering neighbour.
+            </p>
+            <CheckboxRow
+              checked={config.mergeBuildinglessBlocks}
+              label="Merge buildingless blocks into neighbours"
+              onChange={() => setConfig({ ...config, mergeBuildinglessBlocks: !config.mergeBuildinglessBlocks })}
+            />
           </fieldset>
         </div>
       </details>

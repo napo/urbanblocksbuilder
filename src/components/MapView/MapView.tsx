@@ -238,7 +238,7 @@ export function MapView() {
     if (hasResult) {
       map.setPaintProperty('analysis-area-fill', 'fill-opacity', 0)
       map.setPaintProperty('analysis-area-outline', 'line-color', '#000000')
-      map.setPaintProperty('analysis-area-outline', 'line-dasharray', [6, 4])
+      map.setPaintProperty('analysis-area-outline', 'line-dasharray', [10, 6])
       map.setPaintProperty('analysis-area-outline', 'line-width', 2)
     } else {
       map.setPaintProperty('analysis-area-fill', 'fill-opacity', 0.25)
@@ -444,6 +444,7 @@ function buildBlockPopupHtml(properties: Record<string, unknown>): string {
   if (properties.flaggedLargeArea === true || properties.flaggedLargeArea === 'true') flags.push('Unusually large')
   if (properties.flaggedInvalidGeometry === true || properties.flaggedInvalidGeometry === 'true') flags.push('Invalid geometry (repair failed)')
   const isBoundaryClosed = properties.flaggedBoundaryClosure === true || properties.flaggedBoundaryClosure === 'true'
+  const hasNoBuildings = properties.flaggedNoBuildings === true || properties.flaggedNoBuildings === 'true'
 
   return `
     <div style="font-size: 0.85rem; display: grid; gap: 0.15rem;">
@@ -454,6 +455,7 @@ function buildBlockPopupHtml(properties: Record<string, unknown>): string {
       ${properties.districtId ? `<span>District: ${escapeHtml(String(properties.districtId))} (${(Number(properties.districtOverlapRatio ?? 0) * 100).toFixed(0)}% overlap)</span>` : '<span>District: none assigned</span>'}
       ${flags.length > 0 ? `<span style="color:#dc2626;">Warnings: ${flags.join(', ')}</span>` : '<span style="color:#16a34a;">No warnings</span>'}
       ${isBoundaryClosed ? '<span style="color:#b45309;">Part of this block\'s edge is the selection boundary, not a real street.</span>' : ''}
+      ${hasNoBuildings ? '<span style="color:#b45309;">No building inside this block (could not be merged into a neighbour).</span>' : ''}
     </div>
   `
 }

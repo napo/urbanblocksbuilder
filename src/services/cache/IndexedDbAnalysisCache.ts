@@ -1,11 +1,14 @@
-import type { AnalysisCache, CachedAnalysisSummary, CellCacheKeyInput } from './AnalysisCache'
-import type { AnalysisReport, GridCell, OSMWay, UrbanBlock } from '../../domain/types'
+import type { AnalysisCache, CachedAnalysisSummary, CellAcquisitionData, CellCacheKeyInput } from './AnalysisCache'
+import type { AnalysisReport, GridCell, UrbanBlock } from '../../domain/types'
 
 const DB_NAME = 'urban-blocks-builder-cache'
-const DB_VERSION = 1
+// v2 adds the cellData store (replaces cellWays: cached ways now come bundled
+// with building points from the same Overpass call - see CellAcquisitionData).
+// The old cellWays store is left in place, unused, rather than migrated.
+const DB_VERSION = 2
 
 const STORES = {
-  cellWays: 'cellWays',
+  cellData: 'cellData',
   gridState: 'gridState',
   finalBlocks: 'finalBlocks',
   reports: 'reports',
@@ -79,15 +82,15 @@ export class IndexedDbAnalysisCache implements AnalysisCache {
     return digestKey({ ...input, cellBbox: roundedBbox })
   }
 
-  async getCellWays(key: string): Promise<OSMWay[] | null> {
+  async getCellData(key: string): Promise<CellAcquisitionData | null> {
     const db = await this.db()
-    const result = await runTransaction<OSMWay[] | undefined>(db, STORES.cellWays, 'readonly', (store) => store.get(key))
+    const result = await runTransaction<CellAcquisitionData | undefined>(db, STORES.cellData, 'readonly', (store) => store.get(key))
     return result ?? null
   }
 
-  async putCellWays(key: string, ways: OSMWay[]): Promise<void> {
+  async putCellData(key: string, data: CellAcquisitionData): Promise<void> {
     const db = await this.db()
-    await runTransaction(db, STORES.cellWays, 'readwrite', (store) => store.put(ways, key))
+    await runTransaction(db, STORES.cellData, 'readwrite', (store) => store.put(data, key))
     await this.touchMeta('__cells__')
   }
 

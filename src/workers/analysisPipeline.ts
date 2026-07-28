@@ -7,7 +7,7 @@ import { generateAdaptiveGrid, leafCells } from '../grid/adaptiveGrid'
 import { runGridSchedule } from '../grid/gridScheduler'
 import { OverpassClient, deduplicateOsmWays } from '../services/overpass/OverpassClient'
 import type { AnalysisCache } from '../services/cache/AnalysisCache'
-import { getProjectionForBbox, projectGeometry, unprojectGeometry } from '../geometry/projection'
+import { getProjectionForBbox, projectGeometry, projectPoint, unprojectGeometry } from '../geometry/projection'
 import { calculateLogicalLevel } from '../geometry/logicalLayer'
 import { nodeRoadNetwork, type NodingInputLine } from '../geometry/noding'
 import { buildGraphFromNodedEdges, type GraphEdge } from '../geometry/graph'
@@ -15,10 +15,11 @@ import { extractTwoCore } from '../geometry/twoCore'
 import { polygonizeGraph, resolveFaceNesting } from '../geometry/polygonize'
 import { clipPolygonToArea } from '../geometry/clipping'
 import { AOI_BOUNDARY_WAY_ID, computeBoundaryContactLength, extractBoundaryRingLines } from '../geometry/boundaryClosure'
+import { absorbBuildinglessBlocks, type MergeCandidate, type MergedBlock } from '../geometry/blockMerging'
 import { calculateBlockIndicators } from '../geometry/indicators'
 import { assignBlocksToDistricts, computeDistrictStatistics } from '../geometry/districts'
 import { buildAnalysisReport } from '../services/export/exportReport'
-import { fixtureRoads } from '../config/defaults'
+import { fixtureRoads, fixtureBuildingPoints } from '../config/defaults'
 import type { AnalysisPhase, CompletedResultPayload, NamedFeatureCollection } from './workerMessages'
 
 export interface PipelineCallbacks {
@@ -130,12 +131,14 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
   callbacks.onProgress('Cell estimation', 10, { totalCells: cells.length, completedCells: 0 })
 
   let ways: OSMWay[]
+  let buildingPoints: [number, number][]
   let cacheStatus: string
   let cacheHits = 0
 
   if (input.fixtureMode) {
     callbacks.onProgress('Overpass acquisition', 20, { cacheStatus: 'Fixture mode: no Overpass requests were made.' })
     ways = buildFixtureWays()
+    buildingPoints = [...fixtureBuildingPoints]
     cacheStatus = 'Fixture mode: no Overpass requests were made.'
     exactQueries.push('(fixture mode - no live Overpass query executed)')
   } else {
@@ -168,6 +171,7 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
     })
 
     ways = result.ways
+    buildingPoints = result.buildingPoints
     cacheHits = result.cacheHits
     cacheStatus = result.cacheHits > 0
       ? `${result.cacheHits}/${cells.length} cells served from the local cache.`
@@ -189,6 +193,7 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
   callbacks.onProgress('Projection', 45)
   const projection = getProjectionForBbox(area.bbox)
   const areaMetric = projectGeometry(area.geometry, projection)
+  const buildingPointsMetric = buildingPoints.map(([lon, lat]) => projectPoint(lon, lat, projection))
 
   const metricLines: NodingInputLine[] = []
   for (const way of dedupedWays) {
@@ -254,10 +259,8 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
   }
 
   callbacks.onProgress('Indicator calculation', 88)
-  const medianAreaForFlagging = median(polygonizedFaces.map((face) => calculateBlockIndicators(face.geometry).areaM2))
-  const blocksMetric: Array<{ id: string; polygonMetric: GeoJSON.Polygon; properties: UrbanBlockProperties }> = []
-  let blockCounter = 0
-  let boundaryClosedCount = 0
+  let candidateCounter = 0
+  const candidates: MergeCandidate[] = []
 
   for (const face of polygonizedFaces) {
     const clipped = clipPolygonToArea(face.geometry, areaMetric, config.snappingToleranceMeters)
@@ -268,42 +271,90 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
         : clipped.coordinates.map((coordinates) => ({ type: 'Polygon' as const, coordinates }))
 
     for (const polygon of polygonsToEmit) {
-      const indicators = calculateBlockIndicators(polygon)
-      if (indicators.areaM2 <= 0) continue
+      if (calculateBlockIndicators(polygon).areaM2 <= 0) continue
 
-      blockCounter += 1
-      const blockId = `block-${blockCounter}`
-      const flaggedSmallArtifact = indicators.areaM2 < config.minAreaM2
-      const flaggedLargeArea = indicators.areaM2 > config.largeBlockAreaThresholdM2 || (medianAreaForFlagging > 0 && indicators.areaM2 > medianAreaForFlagging * 8)
-      const boundaryContactLength = computeBoundaryContactLength(polygon, areaMetric, config.snappingToleranceMeters)
-      const flaggedBoundaryClosure = boundaryContactLength > config.snappingToleranceMeters * 3
-      if (flaggedBoundaryClosure) {
-        boundaryClosedCount += 1
-      }
-
-      blocksMetric.push({
-        id: blockId,
-        polygonMetric: polygon,
-        properties: {
-          blockId,
-          areaM2: indicators.areaM2,
-          perimeterM: indicators.perimeterM,
-          compactness: indicators.compactness,
-          source: 'osm-road-network',
-          projection,
-          flaggedSmallArtifact,
-          flaggedLargeArea,
-          flaggedInvalidGeometry: face.invalidGeometry && !face.repaired,
-          flaggedBoundaryClosure,
-        },
+      candidateCounter += 1
+      candidates.push({
+        id: `candidate-${candidateCounter}`,
+        polygon,
+        hasBuildings: buildingPointsMetric.some((point) => turf.booleanPointInPolygon(turf.point(point), turf.feature(polygon))),
+        invalidGeometry: face.invalidGeometry && !face.repaired,
       })
     }
+  }
+
+  // Blocks with no building inside them (a park, a parking lot, an
+  // under-mapped patch...) aren't meaningful "urban blocks" on their own, so
+  // fold them into whichever neighbour they share the longest border with -
+  // see blockMerging.ts. A block that ends up with no reachable neighbour is
+  // left as-is and flagged instead.
+  const mergedBlocks: MergedBlock[] = config.mergeBuildinglessBlocks
+    ? absorbBuildinglessBlocks(candidates, config.snappingToleranceMeters)
+    : candidates.map((candidate) => ({
+        mergedIds: [candidate.id],
+        polygon: candidate.polygon,
+        hasBuildings: candidate.hasBuildings,
+        invalidGeometry: candidate.invalidGeometry,
+      }))
+
+  const medianAreaForFlagging = median(mergedBlocks.map((block) => calculateBlockIndicators(block.polygon).areaM2))
+  const blocksMetric: Array<{ id: string; polygonMetric: GeoJSON.Polygon; properties: UrbanBlockProperties }> = []
+  let blockCounter = 0
+  let boundaryClosedCount = 0
+  let mergedBlockCount = 0
+  let stillNoBuildingsCount = 0
+
+  for (const block of mergedBlocks) {
+    const indicators = calculateBlockIndicators(block.polygon)
+    if (indicators.areaM2 <= 0) continue
+
+    blockCounter += 1
+    const blockId = `block-${blockCounter}`
+    const flaggedSmallArtifact = indicators.areaM2 < config.minAreaM2
+    const flaggedLargeArea = indicators.areaM2 > config.largeBlockAreaThresholdM2 || (medianAreaForFlagging > 0 && indicators.areaM2 > medianAreaForFlagging * 8)
+    const boundaryContactLength = computeBoundaryContactLength(block.polygon, areaMetric, config.snappingToleranceMeters)
+    const flaggedBoundaryClosure = boundaryContactLength > config.snappingToleranceMeters * 3
+    if (flaggedBoundaryClosure) {
+      boundaryClosedCount += 1
+    }
+    if (block.mergedIds.length > 1) {
+      mergedBlockCount += 1
+    }
+    if (!block.hasBuildings) {
+      stillNoBuildingsCount += 1
+    }
+
+    blocksMetric.push({
+      id: blockId,
+      polygonMetric: block.polygon,
+      properties: {
+        blockId,
+        areaM2: indicators.areaM2,
+        perimeterM: indicators.perimeterM,
+        compactness: indicators.compactness,
+        source: 'osm-road-network',
+        projection,
+        flaggedSmallArtifact,
+        flaggedLargeArea,
+        flaggedInvalidGeometry: block.invalidGeometry,
+        flaggedBoundaryClosure,
+        flaggedNoBuildings: !block.hasBuildings,
+      },
+    })
   }
 
   if (boundaryClosedCount > 0) {
     addWarning(
       `${boundaryClosedCount} block(s) are partly bounded by the selection edge rather than a real street, because the road network didn't fully enclose that part of the area. This is expected right at the edge of the selection; if it happens well inside it, the road data for that patch may be incomplete (see any grid-cell warnings above).`,
     )
+  }
+
+  if (mergedBlockCount > 0) {
+    addWarning(`${mergedBlockCount} block(s) had no building inside them and were merged into a neighbouring block.`)
+  }
+
+  if (stillNoBuildingsCount > 0) {
+    addWarning(`${stillNoBuildingsCount} block(s) still have no building inside them and could not be merged (no neighbouring block was found).`)
   }
 
   callbacks.onProgress('District assignment', 93)
@@ -385,6 +436,7 @@ export async function runAnalysisPipeline(input: PipelineInput, callbacks: Pipel
     acquisitionStatistics: {
       downloadedWays: ways.length,
       dedupedWays: dedupedWays.length,
+      downloadedBuildings: buildingPoints.length,
       cacheHits,
       failedCells: cells.filter((cell) => cell.state === 'Failed').length,
     },

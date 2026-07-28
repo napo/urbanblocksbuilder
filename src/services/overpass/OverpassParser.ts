@@ -8,6 +8,7 @@ export interface OverpassResponse {
     lon?: number
     tags?: Record<string, string>
     geometry?: Array<{ lat: number; lon: number }>
+    center?: { lat: number; lon: number }
     nodes?: number[]
   }>
 }
@@ -27,6 +28,18 @@ export function parseOverpassWays(response: OverpassResponse): OSMWay[] {
       },
       status: 'downloaded' as const,
     }))
+}
+
+/**
+ * Extracts building locations from the `.buildings out center;` result set
+ * (see OverpassQueryBuilder) as plain [lon, lat] points - only their
+ * presence and rough position matters for the no-buildings block merge (see
+ * blockMerging.ts), not their footprint, so `center` is all this reads.
+ */
+export function parseOverpassBuildingCenters(response: OverpassResponse): [number, number][] {
+  return (response.elements ?? [])
+    .filter((element): element is typeof element & { center: { lat: number; lon: number } } => Boolean(element.center))
+    .map((element) => [element.center.lon, element.center.lat] as [number, number])
 }
 
 /**

@@ -56,6 +56,8 @@ export interface UrbanBlockProperties {
   flaggedInvalidGeometry: boolean
   /** True when a non-trivial part of this block's edge is the analysis-area boundary rather than a real street. */
   flaggedBoundaryClosure: boolean
+  /** True when this block still has no building inside it after the no-building merge pass (nowhere to absorb into). */
+  flaggedNoBuildings: boolean
   districtId?: string
   districtOverlapRatio?: number
 }
@@ -95,6 +97,12 @@ export interface AnalysisConfig {
   includePath: boolean
   includeMotorway: boolean
   includeTrunk: boolean
+  includeWaterway: boolean
+  waterwayFilters: string[]
+  includeRailway: boolean
+  railwayFilters: string[]
+  /** When true, fetches building footprints and merges any block with none into its longest-bordering neighbour. */
+  mergeBuildinglessBlocks: boolean
   contextBufferMeters: number
   initialCellSizeMeters: number
   maxDepth: number

@@ -1,15 +1,15 @@
 import type { AnalysisConfig } from '../../domain/types'
 import { defaultAnalysisConfig } from '../../config/defaults'
-import { describeOverpassError } from './OverpassErrors'
+import { describeOverpassError, HttpStatusError } from './OverpassErrors'
 import { OverpassEndpointRotation } from './OverpassEndpoints'
 import { OverpassQueryBuilder } from './OverpassQueryBuilder'
 import type { OverpassResponse } from './OverpassParser'
 
-export { parseOverpassWays, deduplicateOsmWays } from './OverpassParser'
+export { parseOverpassWays, parseOverpassBuildingCenters, deduplicateOsmWays } from './OverpassParser'
 export type { OverpassResponse } from './OverpassParser'
 
 /** Tags guaranteed to be present in every parsed way, via `out tags geom`. */
-export const REQUESTED_TAGS = ['highway', 'bridge', 'tunnel', 'layer', 'access', 'service', 'area', 'covered', 'junction', 'name', 'oneway']
+export const REQUESTED_TAGS = ['highway', 'waterway', 'railway', 'bridge', 'tunnel', 'layer', 'access', 'service', 'area', 'covered', 'junction', 'name', 'oneway']
 
 export interface OverpassClientOptions {
   timeoutMs?: number
@@ -59,7 +59,7 @@ export class OverpassClient {
       })
 
       if (!response.ok) {
-        throw new Error(`Overpass request failed with HTTP ${response.status}`)
+        throw new HttpStatusError(response.status)
       }
 
       return (await response.json()) as OverpassResponse

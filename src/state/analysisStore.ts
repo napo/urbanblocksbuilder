@@ -17,9 +17,14 @@ export interface LayerVisibility {
   blocks: boolean
 }
 
-/** Applied once a result exists: only the urban blocks stand out over the basemap. */
+/**
+ * Applied once a result exists: the urban blocks stand out over the basemap,
+ * with only the analysis-area boundary also kept visible (restyled to a
+ * transparent, long-dashed outline - see MapView's "Analysis area styling"
+ * effect - so it reads as context behind the blocks, not competing with them).
+ */
 const BLOCKS_ONLY_LAYER_VISIBILITY: LayerVisibility = {
-  analysisArea: false,
+  analysisArea: true,
   districts: false,
   grid: false,
   originalRoads: false,
@@ -88,6 +93,7 @@ interface AnalysisState {
   setDrawingMode: (mode: DrawingMode) => void
   startNewDrawingSession: () => void
   toggleLayer: (layer: keyof LayerVisibility) => void
+  setAllLayersVisible: (visible: boolean) => void
   showOnlyBlocksLayer: () => void
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedDistrictId: (districtId: string | null) => void
@@ -161,6 +167,13 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   toggleLayer: (layer) => set((state) => ({
     layerVisibility: { ...state.layerVisibility, [layer]: !state.layerVisibility[layer] },
   })),
+  setAllLayersVisible: (visible) => set((state) => {
+    const next = { ...state.layerVisibility }
+    for (const layer of Object.keys(next) as Array<keyof LayerVisibility>) {
+      next[layer] = visible
+    }
+    return { layerVisibility: next }
+  }),
   showOnlyBlocksLayer: () => set({ layerVisibility: { ...BLOCKS_ONLY_LAYER_VISIBILITY } }),
   setSelectedBlockId: (blockId) => set({ selectedBlockId: blockId }),
   setSelectedDistrictId: (districtId) => set({ selectedDistrictId: districtId }),

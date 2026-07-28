@@ -37,6 +37,8 @@ export function ResultsPanel() {
             </dd>
             <dt>Boundary-closed</dt>
             <dd>{selectedBlock.properties.flaggedBoundaryClosure ? 'Yes - part of this edge is the selection outline, not a street' : 'No'}</dd>
+            <dt>Has building</dt>
+            <dd>{selectedBlock.properties.flaggedNoBuildings ? 'No - could not be merged into a neighbouring block' : 'Yes'}</dd>
           </dl>
         </div>
       ) : null}
