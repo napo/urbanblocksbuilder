@@ -69,6 +69,28 @@ async function queryCellWithRetries(
       const ways = parseOverpassWays(response).map((way) => ({ ...way, sourceCellIds: [cell.id] }))
       const buildingPoints = parseOverpassBuildingCenters(response)
       const data: CellAcquisitionData = { ways, buildingPoints }
+
+      // A cell with zero roads is almost never genuine for an urban-blocks
+      // analysis - OSM road coverage is near-universal wherever this tool is
+      // useful. It's a known failure mode of the public Overpass mirrors to
+      // return 200 OK with an empty body instead of a proper error when
+      // under load, so treat an empty response like a retryable failure
+      // rather than accepting (and caching!) it immediately - a bad empty
+      // response cached as "the answer" would otherwise silently and
+      // permanently kill this cell for every future run over the same area,
+      // with no error ever surfaced (see the "still doesn't cut" reports
+      // this caused before this fix).
+      if (ways.length === 0 && attempt < config.maxRetries) {
+        await delay(Math.min(1000 * 2 ** attempt, 15000))
+        continue
+      }
+
+      if (ways.length === 0) {
+        callbacks.onWarning(
+          `Grid cell ${cell.id} returned no roads after ${attemptsMade} attempt(s). If this area should have streets, try clearing the local cache (Processing parameters) and running the analysis again.`,
+        )
+      }
+
       if (cache && cacheKey) {
         await cache.putCellData(cacheKey, data)
       }

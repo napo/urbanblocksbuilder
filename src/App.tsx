@@ -274,7 +274,7 @@ function App() {
         </aside>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <MapView />
+          <MapView wizardStep={wizardStep} />
         </div>
       </main>
 

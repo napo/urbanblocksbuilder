@@ -20,7 +20,11 @@ describe('runGridSchedule cancellation', () => {
       const querySpy = vi.spyOn(overpassClient, 'query').mockImplementation(() => {
         resolve()
         return new Promise((res) => {
-          releaseFirstQuery = () => res({ elements: [] })
+          // Non-empty so this resolution is accepted outright rather than
+          // triggering the "retry a suspiciously-empty response" path (see
+          // gridScheduler.retry.test.ts) - this test is only about
+          // cancellation stopping further cells, not about that behaviour.
+          releaseFirstQuery = () => res({ elements: [{ type: 'way', id: 1, tags: { highway: 'residential' }, geometry: [{ lat: 0, lon: 0 }, { lat: 0.001, lon: 0.001 }] }] })
         })
       })
       void querySpy

@@ -18,6 +18,7 @@ import { buildBlockFillExpression } from './blockStyling'
 import { createTerraDraw, ClearDrawControl } from './drawTools'
 import { createAnalysisArea } from '../../domain/analysisArea'
 import type { AnalysisArea } from '../../domain/types'
+import type { WizardStep } from '../Wizard/Stepper'
 
 // MapLibre otherwise derives its worker URL from import.meta.url of its own
 // bundled chunk, which resolves to *our* app bundle once Vite inlines it -
@@ -34,7 +35,11 @@ const LINE_LAYERS: Array<{ id: keyof LayerVisibility; source: string; color: str
   { id: 'twoCoreRoads', source: 'two-core-roads', color: '#64748b' },
 ]
 
-export function MapView() {
+export interface MapViewProps {
+  wizardStep: WizardStep
+}
+
+export function MapView({ wizardStep }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const terraDrawRef = useRef<TerraDraw | null>(null)
@@ -219,11 +224,11 @@ export function MapView() {
     // fitBounds on each of those made the map visibly jump/zoom mid-drag.
     // Auto-fitting only makes sense for area sources the user doesn't
     // already have framed - a place search result or an uploaded file.
-    const isDrawingMode = areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon'
+    const isDrawingMode = (areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon') && wizardStep === 'area'
     if (area && !isDrawingMode) {
       map.fitBounds(new maplibregl.LngLatBounds([area.bbox[0], area.bbox[1]], [area.bbox[2], area.bbox[3]]), { padding: 40, maxZoom: 17 })
     }
-  }, [selectedArea, previewArea, areaSelectionMode])
+  }, [selectedArea, previewArea, areaSelectionMode, wizardStep])
 
   // Analysis area styling: solid grey while it's just a selection, but once
   // a result exists the blocks are the thing to look at, so the selection
@@ -347,7 +352,11 @@ export function MapView() {
     const terraDraw = terraDrawRef.current
     if (!map || !terraDraw) return
 
-    const isDrawMode = areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon'
+    // Drawing is only meaningful while defining the area - once it's been
+    // confirmed and the wizard has moved on, the shape and its instructions
+    // must not linger over the configure/results steps (areaSelectionMode
+    // itself doesn't reset just by navigating away from step 1).
+    const isDrawMode = (areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon') && wizardStep === 'area'
 
     // A full stop/start cycle (not just clear()) resets Terra Draw's
     // internal interaction state machine, not only its feature store -
@@ -407,11 +416,11 @@ export function MapView() {
         clearControlRef.current = null
       }
     }
-  }, [areaSelectionMode, drawingMode, drawSessionToken, setPreviewArea])
+  }, [areaSelectionMode, drawingMode, drawSessionToken, wizardStep, setPreviewArea])
 
   return (
     <section aria-label="Map view" style={{ position: 'relative', height: '100%', width: '100%', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
-      {areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon' ? (
+      {(areaSelectionMode === 'rectangle' || areaSelectionMode === 'polygon') && wizardStep === 'area' ? (
         <div
           style={{
             position: 'absolute',

@@ -26,7 +26,7 @@ export const defaultWaterwayFilters = ['river', 'stream', 'canal']
 export const defaultRailwayFilters = ['rail', 'light_rail', 'tram', 'narrow_gauge']
 
 export const defaultAnalysisConfig: AnalysisConfig = {
-  queryVersion: 'v3',
+  queryVersion: 'v4',
   algorithmVersion,
   endpoint: defaultOverpassEndpoint,
   endpoints: fallbackOverpassEndpoints,
